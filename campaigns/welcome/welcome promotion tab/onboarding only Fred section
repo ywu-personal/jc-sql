@@ -1,0 +1,253 @@
+
+%%[
+
+     /* Pull profile photo url for header */
+    SET @profile_photo_array_1 = LookupRows("ENT.PM_Master_Subscriber_Data", "user_entered_email", lowercase(emailaddr))
+    SET @profile_photo_value_1 = IIF(rowcount(@profile_photo_array_1)== 0, "", Field(Row(@profile_photo_array_1,1),"profile_user_entered_photo"))
+    SET @profile_photo_url_1 = IIF(NOT EMPTY(@profile_photo_value_1), TRIM(@profile_photo_value_1), 'http://email-assets.jobcase.com/empty_pic.jpg')
+
+    SET @fname = IIF(NOT EMPTY([user_entered_first_name]), ProperCase([user_entered_first_name]), "")
+
+    SET @user_key = [user_key]
+
+    SET @subject_line = IIF(not empty(@fname), concat("Thanks and Congrats, ", @fname, "!"), "Thanks and Congrats!")
+    /* SET @subject_line = IIF(not empty(@fname), concat(@fname, ", welcome and here is how you can get the most out of Jobcase"), "Welcome and here is how you can get the most out of Jobcase") */
+
+    SET @preheader = 'Get started with Jobcase'
+
+/* Fred letter section*/
+    SET @casemail_url = 'https://www.jobcase.com/activities/welcome_messages?mm_flow=case_welcome_message_organic'
+
+/* Job search section*/
+
+    SET @job_search_query = [data001]
+
+    SET @location = IIF(NOT EMPTY([user_entered_zip_code]), [user_entered_zip_code], [user_computed_city])
+    SET @displayed_location = IIF(NOT EMPTY(@location),@location, 'you')
+
+    SET @job_search_url = concat("https://www.jobcase.com/jobs/results?q=",@job_search_query,"&l=",@location)
+    IF @job_search_query == 'Work From Home' THEN
+    SET @job_search_url = concat(@job_search_url, "&content_keywords=remote")
+    ENDIF
+
+    SET @all_job_url = concat("https://www.jobcase.com/jobs/results?q=","&l=",@location)
+
+/* Job title section*/
+
+    SET @recTitle1 = 'warehouse'
+    SET @recTitle2 = 'cashier'
+    SET @recTitle3 = 'part time'
+    SET @recTitle4 = 'driver'
+    SET @recTitle5 = IIF(@job_search_query == 'Work From Home','customer service','work from home')
+    SET @recTitle6 = 'full time'
+    SET @recTitle7 = 'sales'
+    SET @recTitle8 = 'stocker'
+    SET @recTitle9 = 'receptionist'
+    SET @recTitle10 = 'manager'
+
+    SET @URLrecTitle1 = concat("https://www.jobcase.com/jobs/results?q=",@recTitle1,"&l=",@location)
+    SET @URLrecTitle2 = concat("https://www.jobcase.com/jobs/results?q=",@recTitle2,"&l=",@location)
+    SET @URLrecTitle3 = concat("https://www.jobcase.com/jobs/results?q=",@recTitle3,"&l=",@location)
+    SET @URLrecTitle4 = concat("https://www.jobcase.com/jobs/results?q=",@recTitle4,"&l=",@location)
+    SET @URLrecTitle5 = IIF(@job_search_query != 'Work From Home',concat('https://jobcase.com/jobs/results?content_keywords=remote&l=',@location),concat("https://www.jobcase.com/jobs/results?q=",@recTitle5,"&l=",@location))
+    SET @URLrecTitle6 = concat("https://www.jobcase.com/jobs/results?q=",@recTitle6,"&l=",@location)
+    SET @URLrecTitle7 = concat("https://www.jobcase.com/jobs/results?q=",@recTitle7,"&l=",@location)
+    SET @URLrecTitle8 = concat("https://www.jobcase.com/jobs/results?q=",@recTitle8,"&l=",@location)
+    SET @URLrecTitle9 = concat("https://www.jobcase.com/jobs/results?q=",@recTitle9,"&l=",@location)
+    SET @URLrecTitle10 = concat("https://www.jobcase.com/jobs/results?q=",@recTitle10,"&l=",@location)
+
+    SET @URLpreferece = "https://www.jobcase.com/profile/work-preferences/edit"
+
+/* Convo section*/
+
+    SET @postedConversationKey1 = [data002]
+    SET @postedConversationUserKey1 = [data003]
+    SET @postedConversationSubject1 = [data004]
+    SET @postedConversationBody1 = 'Landed a work-from-home job after three months of searching!'
+    SET @postedConversationFirstName1 = [data006]
+    SET @postedConversationLastName1 = [data007]
+    SET @postedConversationProfileKey1 = [data008]
+    SET @convo_url_1 = concat("https://www.jobcase.com/conversations/",@postedConversationKey1)
+
+    SET @postedConversationKey2 = [data009]
+    SET @postedConversationUserKey2 = [data010]
+    SET @postedConversationSubject2 = [data011]
+    SET @postedConversationBody2 = [data012]
+    SET @postedConversationFirstName2 = [data013]
+    SET @postedConversationLastName2 = [data014]
+    SET @postedConversationProfileKey2 = [data015]
+    SET @convo_url_2 = concat("https://www.jobcase.com/conversations/",@postedConversationKey2)
+
+/* hardcode article*/
+    SET @postedConversationKey3 = '79bb57c7-30b8-4bef-ba66-9ba9a9d808c1'
+    SET @postedConversationUserKey3 = 'XPPsnw7RbCCF4j_MCWTJyDGs'
+    SET @postedConversationSubject3 = ''
+    SET @postedConversationBody3 = 'Is more stimulus money coming? Updated May 18, 2020: HEROES Relief Act. There are concerns that the $1,200...'
+    SET @postedConversationFirstName3 = 'Amy'
+    SET @postedConversationLastName3 = 'Carleton'
+    SET @postedConversationProfileKey3 = "ASDs-tdZn7rUs8M3C5z3_qIb"
+    SET @convo_url_3 = concat("https://www.jobcase.com/articles/",@postedConversationKey3)
+
+    Set @see_all_conversations_url = "https://www.jobcase.com/community/foryou"
+
+    SET @profile_photo_array_convo1 = LookupRows("ENT.PM_Master_Subscriber_Data", "user_key", lowercase(data003))
+    SET @profile_photo_value_convo1 = IIF(rowcount(@profile_photo_array_convo1)== 0, "", Field(Row(@profile_photo_array_convo1,1),"profile_user_entered_photo"))
+    SET @profile_photo_url_convo1 = IIF(NOT EMPTY(@profile_photo_value_convo1), TRIM(@profile_photo_value_convo1), 'http://email-assets.jobcase.com/empty_pic.jpg')
+
+    SET @profile_photo_array_convo2 = LookupRows("ENT.PM_Master_Subscriber_Data", "user_key", lowercase(data010))
+    SET @profile_photo_value_convo2 = IIF(rowcount(@profile_photo_array_convo2)== 0, "", Field(Row(@profile_photo_array_convo2,1),"profile_user_entered_photo"))
+    SET @profile_photo_url_convo2 = IIF(NOT EMPTY(@profile_photo_value_convo2), TRIM(@profile_photo_value_convo2), 'http://email-assets.jobcase.com/empty_pic.jpg')
+
+    SET @profile_photo_array_convo3 = LookupRows("ENT.PM_Master_Subscriber_Data", "user_key", lowercase(@postedConversationUserKey3))
+    SET @profile_photo_value_convo3 = IIF(rowcount(@profile_photo_array_convo3)== 0, "", Field(Row(@profile_photo_array_convo3,1),"profile_user_entered_photo"))
+    SET @profile_photo_url_convo3 = IIF(NOT EMPTY(@profile_photo_value_convo3), TRIM(@profile_photo_value_convo3), 'http://email-assets.jobcase.com/empty_pic.jpg')
+
+]%%
+
+
+
+
+    <html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+    <meta content="initial-scale=1.0" name="viewport">
+    <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+    <link href='http://fonts.googleapis.com/css?family=Roboto:300,400,500' rel='stylesheet' type='text/css'/>
+    <link rel="stylesheet" href="path/to/font-awesome/css/font-awesome.min.css"/>
+    <!--[if mso]>
+			<style>
+				* {
+				  font-family: sans-serif !important;
+				}
+			</style>
+			<![endif]-->
+
+    <style type="text/css">
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+body {
+    width: 100% !important;
+    overflow-y: scroll;
+    -webkit-text-size-adjust: none;
+    background-color: #F4F4F4
+}
+.ReadMsgBody {
+    width: 100%;
+}
+.ExternalClass {
+    width: 100%;
+}
+.ExternalClass * {
+    line-height: 120% !important;
+}
+.appleLinksBlack a {
+    color: #ffffff !important;
+    text-decoration: none;
+}
+.applelink a, .applelink {
+    color: inherit;
+    text-decoration: none;
+}
+.text {
+    width: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+</style>
+    </head>
+    <!--INLINE BODY STYLE-->
+    <body bgcolor="#F4F4F4" style="-webkit-text-size-adjust:none; width: 100% !important; margin:0; overflow-y:scroll;  padding: 0;">
+    <!--THIS IS THE 100% WRAPPER TABLE-->
+
+    <!--THIS IS THE 100% WRAPPER TABLE-->
+    <table align="center" bgcolor="#F4F4F4" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0;" width="100%">
+      <tr>
+        <td align="center" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="" valign="middle"><!--[if (gte mso 9)|(IE)]>
+<table width="550" style="max-width:550px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td>
+<![endif]-->
+
+          <table align="center" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0; max-width:550px !important;" width="100%">
+            <tr>
+              <td align="left" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" id="smaller2" style=" padding-top:10px; padding-bottom:10px; padding-left:25px; padding-right:10px;" valign="middle" width="50%"><a href="%%=RedirectTo('https://www.jobcase.com/r/profile')=%%">
+                <table align="left" border="0" cellpadding="0" cellspacing="0" height="0" width="42">
+                <tr>
+                    <td style="color:#FFFFFF; font-family: 'Roboto', Arial, Helvetica, sans-serif; font-size:19px; line-height:23px; font-weight:bold; border:none;"><img alt="" border="0" height="31" src="http://email-assets.jobcase.com/jc3/jc_logo_new_r2.png" style="display:block;"></td>
+                  </tr>
+              </table>
+                </a></td>
+              <td align="right" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" id="smaller2" style=" font-size:22px; padding-top:9px; padding-bottom:9px; padding-left:10px; padding-right:25px; color:#FFFFFF; font-family: 'Roboto', Arial, Helvetica, sans-serif; max-width:240px !important;" valign="middle" width="50%"><a href="%%=RedirectTo('https://www.jobcase.com/r/profile')=%%" style="text-decoration: none;">
+                <table border="0" cellpadding="0" cellspacing="0" width="23">
+                <tr>
+                    <td><img alt="" border="0" height="23" src="%%=v(@profile_photo_url_1)=%%" style="border-radius:50%; display:block; border-style: solid; border-color: #FFFFFF; border-width: 2px;" width="23"></td>
+
+                  </tr>
+              </table>
+                </a></td>
+            </tr>
+          </table></td>
+      </tr>
+    </table>
+    <table align="center" bgcolor="#F4F4F4" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0;" width="100%">
+
+      <!----Section block 1----->
+      <tr>
+        <td align="center" style="margin:0; padding-top: 18px; padding-left: 15px; padding-right: 15px;" valign="top" width="100%"><!--THIS IS THE 550px CONTAINER TABLE-->
+          <!--[if (gte mso 9)|(IE)]>
+<table width="550" style="max-width:550px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td>
+<![endif]-->
+
+          <table width="100%" align="center" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="box-shadow: 0px 0px 13px -3px rgba(0,0,0,0.13); max-width:550px !important; border-radius: 8px !important; ">
+
+            <!-------Header------>
+
+            <tr>
+              <td  width="100%" align="center" valign="middle" style="padding-top:25px; padding-right:15px; padding-left: 15px; padding-bottom: 15px; color:#1a1a1a; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:26px; line-height: 27px; font-weight:500; text-decoration:none;   "> Welcome to Jobcase!</td>
+            </tr>
+            <tr>
+              <td width="100%" align="center" valign="middle" style="padding-top:0px; padding-right:22px; padding-left: 22px; padding-bottom: 10px; color:#1a1a1a; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:15px; line-height: 23px; font-weight:400; text-decoration:none;   ">A message from our CEO</td>
+            </tr>
+			   <tr>
+                      <td valign="top"  colspan="2" align="center"  bgcolor="#FFFFFF" style="margin:0; padding-left:25px; padding-right:25px; padding-top:5px; padding-bottom:15px; color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:22px;  font-weight:400; " cellpadding="0" cellspacing="0" border="0"><a href="%%=RedirectTo(@casemail_url)=%%" style="color:#444444; text-decoration:none;">Thank you for joining Jobcase! We are all so happy you chose us to make your work-life, work for you! You should have another...  <span style="color:#007bc7; font-weight: 700; text-decoration: underline;">Read More</span></a></td>
+                    </tr>
+
+                            <tr>
+                <td width="100%" align="left" valign="middle" bgcolor="#FFFFFF" style="padding-bottom: 10px;" cellpadding="0" cellspacing="0" border="0"><a href="%%=RedirectTo(@casemail_url)=%%">
+                  <table height="0" align="center" width="178" border="0" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="color:#FFFFFF; font-family: Arial, Helvetica, sans-serif; font-size:19px; line-height:23px; font-weight:bold; border:none;"><img src="http://email-assets.jobcase.com/fred19.jpg" width="178" height="110" style="display:block;" border="0" alt=""/></td>
+                    </tr>
+                  </table>
+                  </a></td>
+
+              </tr>
+
+
+            <!-------button block------>
+
+            <tr>
+              <td  align="center"   style="margin:0;  color:#FFFFFF; padding-top:0px; padding-bottom:30px; font-family:Arial, Helvetica, sans-serif; font-size:25px; line-height:22px;  font-weight:300; " cellpadding="0" cellspacing="0" border="0"><table width="250" height="46" bgcolor="#007bc7" cellpadding="0" cellspacing="0" align="center" style="margin:0; border-radius:70%; " border="0" valign="top">
+                  <tr>
+                  <td width="270" height="44" bgcolor="#007bc7" cellpadding="0"cellspacing="0" align="center" valign="middle" style="margin:0; font-size:18px; color:#ffffff; font-family:Roboto, Arial, Helvetica, sans-serif; line-height:16px; border-radius:50px; font-weight:400; background-repeat:repeat-x; " border="0"><span style="font-size:15px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><a href="%%=RedirectTo(@casemail_url)=%%" style="color:#ffffff; text-decoration:none; width:270px;  padding-top:18px; padding-bottom:16px; vertical-align:middle; display:block;  font-size:16px;  border-radius:6px;" target="_blank"><span style="color:#FFFFFF;">View all messages</span></a></span></td>
+                </tr>
+                </table></td>
+            </tr>
+          </table></td>
+      </tr>
+
+      <tr>
+        <td align="center" bgcolor="#F4F4F4" colspan="2" style="padding-top:30px; padding-bottom: 30px; padding-left:0px; padding-right:0px; color:#4D4D4D; font-family: 'Roboto', Arial, Helvetica, sans-serif; font-size:11px; line-height:14px; font-weight:normal;">%%=ContentArea("180")=%%</td>
+      </tr>
+    </table>
+    </tr>
+    </td>
+    </table>
+    </body>
+    <custom name="opencounter" type="tracking">
+    </html>

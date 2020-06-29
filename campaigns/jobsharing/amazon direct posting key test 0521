@@ -1,0 +1,168 @@
+-- jobsharing testing postingkey vs listingkey for Amazon Direct
+
+create table #job_clickout_revenue distkey(user_key) as
+SELECT user_key, arrival_key
+                 , SUM(job_search_clickout_revenue) job_revenue
+                 , count(distinct case when job_search_clickout_disposition = 'SUCCESS' AND job_search_clickout_status = 'POSTED' THEN job_search_clickout_key END) job_clicks
+          FROM job_search_clickouts
+            NATURAL JOIN arrivals
+          WHERE arrival_computed_bot_classification IS NULL
+          AND   arrival_application = 'jobcase.com'
+          and job_search_clickout_disposition = 'SUCCESS'
+                                        and job_search_clickout_status = 'POSTED'
+          AND  arrival_created_at >= convert_timezone('America/New_York', 'UTC', '2020-05-22 00:00')
+          GROUP BY 1,2
+;
+
+drop table if exists #inuvo_ad_revenue;
+create table #inuvo_ad_revenue distkey(user_key) as
+SELECT user_key, arrival_key
+                 , SUM(revenue) ad_revenue
+                 , SUM(clicks) ad_clicks
+                 , SUM(bidded_searches) ad_impressions
+          FROM dbm.inuvo_revenue
+           NATURAL JOIN arrivals
+          WHERE arrival_computed_bot_classification IS NULL
+          AND   arrival_application = 'jobcase.com'
+          AND   arrival_created_at >= convert_timezone('America/New_York', 'UTC', convert_timezone('America/New_York', getdate() - interval '360 days')::date)
+          GROUP BY 1,2
+;
+
+
+select
+convert_timezone('America/New_York', c.communication_sent_time)::Date AS sent_date
+--, case when communication_to_address_email_domain_group in ('GMAIL', 'YAHOO', 'AOL', 'MSN') then communication_to_address_email_domain_group else 'OTHER' END AS domain_group
+, case when substring(md5(concat('05_21_AD', md5(c.user_key))),6,1) < '8' then 'Control'
+       else 'Test' end as Test_group
+, count(distinct c.communication_id) AS emails_attempted
+, count(distinct case when c.communication_failure_time IS NULL THEN c.communication_id END) AS emails_sent
+, count(distinct case when c.communication_failure_time IS NULL AND COALESCE(c.communication_open_time_initial,c.communication_click_time_initial) IS NOT NULL THEN c.communication_id END) AS emails_opened
+, count(distinct case when c.communication_failure_time IS NULL AND c.communication_click_time_initial IS NOT NULL THEN c.communication_id END) emails_clicked
+, count(distinct case when c.communication_failure_time is null and (osd.email_address is not null or c.communication_unsubscribe_time_initial is not null) then c.communication_id end) emails_offer_specific_unsubscribed
+--
+, count(distinct a.arrival_key) as arrivals
+, count(distinct case when ssr.company='Amazon' and a.arrival_url ilike '%listing-check%' and length(ssr.listing_key) = 27 then a.arrival_key end) as arrivals_posting
+, count(distinct case when ssr.company='Amazon' and r.job_search_impression_subsource = 'Amazon_Direct'  and a.arrival_url ilike '%listing_check%' and length(ssr.listing_key) = 33 then a.arrival_key end) as arrivals_listing
+, count(distinct case when a.arrival_url ilike '%jobs/result%' then a.arrival_key end) as arrivals_job_search
+, sum(jcr.job_clicks)::float / count(distinct ca.arrival_key) as cpa
+, sum(case when ssr.company='Amazon' and a.arrival_url ilike '%listing-check%' and length(ssr.listing_key) = 27  then jcr.job_clicks end)::float / (count(distinct case when ssr.company='Amazon' and a.arrival_url ilike '%listing-check%' and length(ssr.listing_key) = 27 then a.arrival_key end)+.0001) as cpa_posting
+, sum(case when ssr.company='Amazon' and r.job_search_impression_subsource = 'Amazon_Direct' and a.arrival_url ilike '%listing_check%' and length(ssr.listing_key) = 33  then jcr.job_clicks end)::float / (count(distinct case when ssr.company='Amazon' and r.job_search_impression_subsource = 'Amazon_Direct'  and a.arrival_url ilike '%listing_check%' and length(ssr.listing_key) = 33 then a.arrival_key end)+.0001) as cpa_listing
+, sum(case when a.arrival_url ilike '%jobs/result%' then jcr.job_clicks end)::float / (count(distinct case when a.arrival_url ilike '%jobs/result%' then a.arrival_key end)+.0001) as cpa_job_search
+, sum(coalesce(jcr.job_revenue, 0) + coalesce(ir.ad_revenue, 0))::float /  count(distinct ca.arrival_key) as vpa
+, sum(case when ssr.company='Amazon' and a.arrival_url ilike '%listing-check%' and length(ssr.listing_key) = 27 then coalesce(jcr.job_revenue, 0) + coalesce(ir.ad_revenue, 0) end)::float / (count(distinct case when ssr.company='Amazon' and a.arrival_url ilike '%listing-check%' and length(ssr.listing_key) = 27  then a.arrival_key end)+.0001) as vpa_posting
+, sum(case when ssr.company='Amazon' and r.job_search_impression_subsource = 'Amazon_Direct' and a.arrival_url ilike '%listing_check%' and length(ssr.listing_key) = 33 then coalesce(jcr.job_revenue, 0) + coalesce(ir.ad_revenue, 0) end)::float / (count(distinct case when ssr.company='Amazon' and r.job_search_impression_subsource = 'Amazon_Direct'  and a.arrival_url ilike '%listing_check%' and length(ssr.listing_key) = 33  then a.arrival_key end)+ .0001) as vpa_listing
+, sum(case when a.arrival_url ilike '%jobs/result%' then coalesce(jcr.job_revenue, 0) + coalesce(ir.ad_revenue, 0) end)::float / (count(distinct case when a.arrival_url ilike '%jobs/result%' then a.arrival_key end)+.0001) as vpa_job_search
+, sum(jcr.job_clicks)::float as jobclicks
+, sum(coalesce(jcr.job_revenue, 0)) as revenue
+, (revenue/emails_sent)*1000 as ecpm
+, emails_clicked*1.00/emails_sent as click_rate
+, emails_opened*1.00/emails_sent as open_rate
+, click_rate*1.00/open_rate as click_to_open
+, arrivals*1.00/emails_sent as ctr
+from communications c
+left join dbm.communication_to_arrival ca
+  on ca.user_key = c.user_key
+  and ca.communication_channel = 'EMAIL'
+  and ca.communication_id = c.communication_id
+  and ca.communication_sent_time >= convert_timezone('America/New_York', 'UTC', '2020-05-22 00:00')
+left join
+(
+select av.*
+, case when av.arrival_url ilike '%job_listing_rk=1%' then 1
+       when av.arrival_url ilike '%job_listing_rk=2%' then 2
+       when av.arrival_url ilike '%job_listing_rk=3%' then 3
+       when av.arrival_url ilike '%job_listing_rk=4%' then 4
+       when av.arrival_url ilike '%job_listing_rk=5%' then 5
+       else 6 end as listing_rank
+from arrivals av
+) a
+-- left join arrivals a
+on a.user_key = ca.user_key and a.arrival_key = ca.arrival_key
+left join
+(
+    select distinct sendid || '_' || batchid as email_batch_id
+    , emailaddress as email_address
+    from dbm.jobcase_preferences
+    where  option_id  in ('3','4')
+) osd on c.communication_to_address = osd.email_address and c.bulk_send_id = osd.email_batch_id
+left join #job_clickout_revenue jcr on jcr.user_key = ca.user_key and jcr.arrival_key = ca.arrival_key
+left join #inuvo_ad_revenue ir on ir.user_key = a.user_key and ir.arrival_key = a.arrival_key
+left join dbm.jc_job_sharing_send_record_email_1_rollout_multiple ssr
+     on convert_timezone('America/New_York', c.communication_sent_time)::date = ssr.send_date and c.user_key = ssr.user_key and ssr.rk = a.listing_rank
+left join
+(
+select distinct job_search_impression_job_listing_key
+, pull_date
+, job_search_impression_subsource
+from
+dbm.jc_job_sharing_job_rollout_record_multiple
+group by 1,2,3
+) r
+on r.job_search_impression_job_listing_key = ssr.listing_key and r.pull_date = ssr.send_date
+where
+c.communication_sending_domain IN ('jobcase.com','post.jobcase.com','t.jobcase.com', 'umail.jobcase.com', 'tumail.jobcase.com')
+and c.communication_sent_time >= convert_timezone('America/New_York', 'UTC', '2020-05-22 00:00')
+AND (c.communication_vendor_template_name in ('JC_Job_Sharing_Hot_Job', 'JC_Job_Sharing_Hot_Job_65') or outbound_communication_template_name ilike 'jobcase_job_sharing%')
+group by 1,2
+order by 1,2
+;
+
+
+-- below is the overall results
+
+-- overall results
+
+select
+convert_timezone('America/New_York', c.communication_sent_time)::Date AS sent_date
+, case when substring(md5(concat('05_21_AD', md5(c.user_key))),6,1) < '8' then 'Control'
+       else 'Test' end as Test_group
+, count(distinct c.communication_id) AS emails_attempted
+, count(distinct case when c.communication_failure_time IS NULL THEN c.communication_id END) AS emails_sent
+, count(distinct case when c.communication_failure_time IS NULL AND COALESCE(c.communication_open_time_initial,c.communication_click_time_initial) IS NOT NULL THEN c.communication_id END) AS emails_opened
+, count(distinct case when c.communication_failure_time IS NULL AND c.communication_click_time_initial IS NOT NULL THEN c.communication_id END) emails_clicked
+, count(distinct case when c.communication_failure_time is null and (osd.email_address is not null or c.communication_unsubscribe_time_initial is not null) then c.communication_id end) emails_offer_specific_unsubscribed
+--
+-- , count(distinct case when a.arrival_url ilike '%listing%check%' then a.arrival_key end) as arrivals_job_listing
+-- , count(distinct case when a.arrival_url ilike '%jobs/result%' then a.arrival_key end) as arrivals_job_search
+, sum(jcr.job_clicks)::float / count(distinct ca.arrival_key) as cpa
+-- , sum(case when a.arrival_url ilike '%listing%check%' then jcr.job_clicks end)::float / (count(distinct case when a.arrival_url ilike '%listing%check%' then a.arrival_key end)+.00001) as cpa_job_listing
+-- , sum(case when a.arrival_url ilike '%jobs/result%' then jcr.job_clicks end)::float / (count(distinct case when a.arrival_url ilike '%jobs/result%' then a.arrival_key end)+.00001) as cpa_job_search
+, sum(coalesce(jcr.job_revenue, 0) + coalesce(ir.ad_revenue, 0))::float /  count(distinct ca.arrival_key) as vpa
+-- , sum(case when a.arrival_url ilike '%listing%check%' then coalesce(jcr.job_revenue, 0) + coalesce(ir.ad_revenue, 0) end)::float / (count(distinct case when a.arrival_url ilike '%listing%check%' then a.arrival_key end)+.00001) as vpa_job_listing
+-- , sum(case when a.arrival_url ilike '%jobs/result%%' then coalesce(jcr.job_revenue, 0) + coalesce(ir.ad_revenue, 0) end)::float / (count(distinct case when a.arrival_url ilike '%jobs/result%' then a.arrival_key end)+.00001) as vpa_job_search
+--
+, sum(jcr.job_clicks)::float as jobclicks
+-- , sum(jcr.job_clicks)::float / (arrivals +.00001) as cpa
+-- , sum(coalesce(jcr.job_revenue, 0))::float / (arrivals +.00001) as vpa
+, sum(coalesce(jcr.job_revenue, 0)) as revenue
+, (revenue/emails_sent)*1000 as ecpm
+, emails_clicked*1.00/emails_sent as click_rate
+, emails_opened*1.00/emails_sent as open_rate
+, click_rate*1.00/open_rate as click_to_open
+-- , arrivals*1.00/emails_sent as ctr
+from communications c
+left join dbm.communication_to_arrival ca
+  on ca.user_key = c.user_key
+  and ca.communication_channel = 'EMAIL'
+  and ca.communication_id = c.communication_id
+  and ca.communication_sent_time >= convert_timezone('America/New_York', 'UTC', '2020-05-22 00:00')
+left join arrivals a
+  on a.user_key = ca.user_key and a.arrival_key = ca.arrival_key
+left join
+(
+    select distinct sendid || '_' || batchid as email_batch_id
+    , emailaddress as email_address
+    from dbm.jobcase_preferences
+    where  option_id  in ('3','4')
+) osd on c.communication_to_address = osd.email_address and c.bulk_send_id = osd.email_batch_id
+left join #job_clickout_revenue jcr on jcr.user_key = ca.user_key and jcr.arrival_key = ca.arrival_key
+left join #inuvo_ad_revenue ir on ir.user_key = a.user_key and ir.arrival_key = a.arrival_key
+where
+c.communication_sending_domain IN ('jobcase.com','post.jobcase.com','t.jobcase.com', 'umail.jobcase.com', 'tumail.jobcase.com')
+and c.communication_sent_time >= convert_timezone('America/New_York', 'UTC', '2020-05-22 00:00')
+AND (c.communication_vendor_template_name in ('JC_Job_Sharing_Hot_Job', 'JC_Job_Sharing_Hot_Job_65') or outbound_communication_template_name ilike 'jobcase_job_sharing%')
+-- and jr.rk = arrival_listing
+-- and arrival_listing in ('1','2','3','4')
+group by 1,2
+order by 1,2
+;

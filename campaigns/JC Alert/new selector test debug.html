@@ -1,0 +1,1125 @@
+%%[
+Set @user_key = [user_key]
+/* data 1-4 declared but unused: correspond to user_computed_city, from_name, AB_category_creative, job_search_impression_job_listing_key */
+Set @data001 = [data001]
+Set @data002 = [data002]
+Set @data003 = [data003]
+Set @data004 = [data004]
+
+Set @user_computed_city = [user_computed_city]
+Set @user_computed_state = [user_computed_state]
+Set @fname = Propercase(TRIM([user_entered_first_name]))
+
+/***************************************
+Identify whether the search run is:
+A = a profile interest job title
+C = a recommended job search
+
+IF A, then show profile interest banner.
+IF C, then show search bar at top.
+****************************************/
+SET @test_group = [data006] /* Current active values: 'A','B','C' */
+
+
+/******************
+RUN SEARCH
+******************/
+
+/* data to use for the new bragi strategy -- changed city,state,job_title which were all unused */
+
+SET @jobSearchQueryParameter = [data007]
+SET @jobSearchLocationParameter = [data008]
+SET @selector_group = [data009]
+
+/* bragi call test */
+SET @radius_test_eligibility = IIF(NOT EMPTY([data005]), [data005], '')
+IF @radius_test_eligibility == 'low_density_population' THEN
+	SET @radius = '35'
+ELSE
+	SET @radius = '25'
+ENDIF
+
+/* ourbound search selector test 05/26/2020 */
+IF substring(md5(concat('s05l26', md5(@user_key))),7,1) < '8' THEN
+ SET @selector_test_group = 'Control'
+ELSE
+ SET @selector_test_group = 'Test'
+ENDIF
+
+
+/* Use new search (different parameters and weights are specified in SQL) only if query and location are not null */
+IF (NOT EMPTY(@jobSearchQueryParameter) AND NOT EMPTY(@jobSearchLocationParameter)) THEN
+  IF @selector_test_group == 'Control' THEN
+	  IF @selector_group == 'reengage' THEN
+	  Set @URL = concat('http://odin.p11a.com/api/rpc/OutboundJobSearchService/searchForJobListings?channel=EMAIL&endpoint=',lowercase(emailaddr),'&selector=JobcaseEmailReengage')
+	  ELSE
+	  Set @URL = concat('http://odin.p11a.com/api/rpc/OutboundJobSearchService/searchForJobListings?channel=EMAIL&endpoint=',lowercase(emailaddr),'&selector=JobcaseEmailRecommendedSearch')
+	  ENDIF
+	ELSE
+	  IF @selector_group == 'reengage' THEN
+	  Set @URL = concat('http://odin.p11a.com/api/rpc/OutboundJobSearchService/searchForJobListings?channel=EMAIL&endpoint=',lowercase(emailaddr),'&selector=JobcaseEmailRecommendedSearchTest ')
+	  ELSE
+	  Set @URL = concat('http://odin.p11a.com/api/rpc/OutboundJobSearchService/searchForJobListings?channel=EMAIL&endpoint=',lowercase(emailaddr),'&selector=JobcaseEmailRecommendedSearchTest ')
+	  ENDIF
+	ENDIF
+
+	SET @payload = concat('{"query":"',replace(@jobSearchQueryParameter, "&", " ") ,'","location":"',@jobSearchLocationParameter,'","radius":"',@radius,'","resultsRequested": "15"}')
+
+	SET @bragi_type = 'NEW' /* Variable for easy checking later */
+
+/* Use old search for control or if either query or location is empty, which would cause the new search to fail */
+ELSE
+	SET @URL = concat('http://odin.p11a.com/api/rpc/OutboundJobSearchService/searchForJobListings?channel=EMAIL&endpoint=',lowercase(emailaddr),'&selector=ExactTarget1')
+
+			SET @payload = concat('{"radius":"',@radius,'","resultsRequested": "15"}')
+
+	SET @bragi_type = 'OLD' /* Variable for easy checking later */
+ENDIF
+
+/* Make Call to Perform Job Search and Return Listings */
+HTTPPost(@URL,"application/json",@payload,@response)
+
+SET @header_date = FormatDate(now(),"MMM DD, YYYY")
+
+
+
+/**************************
+SET UP SL & COMPANY SECTION
+(grouped listings up top)
+**************************/
+
+/*********************************************************************************************
+	(1) first iteration looping through returned listings:
+	(i.) SUBJECT LINE: Identify subject line company "Company is hiring"
+	(ii.) COMPANY SECTION: Identify creative type: @companyCreative
+		 	B -- group together listings at top of email if they match the company in the SL and there's a company logo image available
+			A -- just list all listings in order in 2 columns (desktop) or 1 column (mobile)
+*********************************************************************************************/
+
+]%%
+	{{.datasource JsonVar type=variable maxrows=15}}
+     {{.data}}
+          {"target":"@response"}
+     {{/data}}
+
+%%[
+/* get running count of job listings and set the random position company name */
+set @jobResultsCount = 0
+set @firstGoodCompany = 999
+set @salaryJobs = 0
+]%%
+
+		 {{.datasource jobListings type=nested maxrows=15}}
+		{{.data}}
+			{"target" : "JsonVar.jobListings"}
+		{{/data}}
+
+%%[
+set @jobResultsCount = Add(@jobResultsCount,1)
+
+
+/* Get Subject Info for first "good" company */
+if @jobResultsCount < @firstGoodCompany AND treatascontent('{{companyName}}') != "Lyft" AND treatascontent('{{companyName}}') != "Uber" AND treatascontent('{{companyName}}') != "FindDreamJobs.com" AND IndexOf(lowercase(treatascontent('{{companyName}}')), 'delta') == 0 then
+  set @firstGoodCompany = @jobResultsCount /* 1-indexed */
+  set @subjectCompany = treatascontent('{{companyName}}')
+  set @subjectTitle = treatascontent('{{jobTitle}}')
+
+
+
+endif
+
+/* Pull job search query and location for general search cta button's link url */
+IF @bragi_type == 'OLD' THEN
+	SET @queryterm = treatascontent('{{jobSearchQuery}}')
+	SET @queryloc = treatascontent('{{jobSearchLocation}}')
+ELSEIF @bragi_type == 'NEW' THEN
+	SET @queryterm = @jobSearchQueryParameter
+	SET @queryloc = @jobSearchLocationParameter
+ENDIF
+
+SET @searchURL = concat("https://www.jobcase.com/jobs/results?q=",URLEncode(replace(@queryterm, "&", " ")),"&l=",URLEncode(@queryloc))
+
+/* Search company logos for one matching job search query, @logo_q_url */
+SET @company_q_row = LookupRows("ENT.Company_Logo_Image_Names","company_name", @queryterm)
+SET @company_q_row_value = IIF(rowcount(@company_q_row)== 0, "", Field(Row(@company_q_row,1),"logo_image_name"))
+SET @logo_q_url = IIF(NOT EMPTY(@company_q_row_value), concat("http://email-assets.jobcase.com/jc/company-logos-0318/jc-grid-logos/",@company_q_row_value,".jpg"), "")
+
+/* Search company logos for one matching company name of job listing referred to in subject line "Company is hiring", @logo_s_url */
+SET @company_s_row = LookupRows("ENT.Company_Logo_Image_Names","company_name", @subjectCompany)
+SET @company_s_row_value = IIF(rowcount(@company_s_row)== 0, "", Field(Row(@company_s_row,1),"logo_image_name"))
+
+SET @companyCreative = IIF(not empty(@company_q_row_value) and @company_s_row_value == @company_q_row_value, 'B', 'A')
+
+]%%
+
+%%[/* close the nested joblistings data source */]%%
+{{/datasource}}
+
+%%[
+
+
+/******************
+SET SUBJECT LINE
+******************/
+
+if EMPTY(@subjectCompany) then
+	set @subjectLine = "great companies are hiring."
+else
+	set @subjectLine = Concat(@subjectCompany, " is hiring.")
+endif
+
+if NOT EMPTY(@fname) then
+	set @subjectLine = Concat(ProperCase(@fname), ", ",@subjectLine)
+endif
+
+
+
+SET @preheader = ''
+
+SET @editLink = "https://www.jobcase.com/profile/work-preferences/edit"
+
+
+
+/* do not send if there are no more than 2 jobs available */
+If @jobResultsCount <= 0 Then
+	RaiseError('Do not send to subscriber', true)
+EndIf
+
+
+/**********************************************
+SET UP OTHER RECOMMENDED KEYWORDS SECTION
+**********************************************/
+
+/* Keyword Section Header Text */
+
+SET @keyword_section_header = "Revisit Your Previous Searches"
+
+/*
+placement of section define number of listings (after min. X listings)
+(MUST BE EVEN NUMBER).  Currently can't show after last listing. (so max 14)
+*/
+SET @keyword_section_placement = 6
+)
+
+/* Recommended keywords */
+SET @keyword_list = [data004]
+SET @keywords_rowset = BuildRowsetFromString(@keyword_list,'|')
+
+SET @n_keywords_to_show = 3
+
+SET @n_keywords = IIF(Rowcount(@keywords_rowset) >= @n_keywords_to_show
+ 	, @n_keywords_to_show
+	, Rowcount(@keywords_rowset)
+)
+
+Set @remote_copy = "Did you know that you can search for remote jobs on Jobcase?"
+Set @remote_search_url = concat('https://jobcase.com/jobs/results?content_keywords=remote&l=',@jobSearchLocationParameter)
+Set @remote_query = 'Work from home'
+
+SET @remote_test_group = IIF(substring(md5(concat('trf_327', md5(@user_key))),8,1) < '4', 'test1', IIF(substring(md5(concat('trf_327', md5(@user_key))),8,1) < '8', 'test2', 'control'))
+IF @remote_test_group == 'test2' THEN
+	SET @keyword_section_header = "Your Recommended Searches"
+ENDIF
+]%%
+
+           <html>
+           <head>
+           <meta content="initial-scale=1.0" name="viewport">
+           <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+           <!--[if mso]>
+<style>
+    * {
+      font-family: sans-serif !important;
+    }
+</style>
+<![endif]-->
+
+           <!--[if !mso]><!-->
+           <link href="http://fonts.googleapis.com/css?family=Roboto:300,400,500,700,900" rel="stylesheet" type="text/css">
+           <!--<![endif]-->
+
+           <style type="text/css">
+table {
+	border-collapse: collapse;
+	border-spacing: 0;
+}
+body {
+	width: 100% !important;
+	overflow-y: scroll;
+	-webkit-text-size-adjust: none;
+	background-color: #F8F8F8;
+}
+.ReadMsgBody {
+	width: 100%;
+}
+.ExternalClass {
+	width: 100%;
+}
+.ExternalClass * {
+	line-height: 120% !important;
+}
+.appleLinksBlack a {
+	color: #ffffff !important;
+	text-decoration: none;
+}
+.applelink a, .applelink {
+	color: inherit;
+	text-decoration: none;
+}
+@media (min-width: 634px) {
+.switch {
+	width: 600px !important;
+}
+.image1 img {
+	width: 600px;
+	height: 232px;
+}
+.height-fix {
+	min-height: 220px !important;
+		}
+.single-spacing {
+	padding-left: 20px !important;
+	padding-right: 20px !important;
+	padding-top: 0px !important;
+	padding-bottom: 10px !important;
+		}
+}
+@media (max-width: 634px) {
+.fullwidthnon {
+	width: 100% !important;
+	max-width: 600px !important;
+}
+.image_resize {
+	width: 200px !important;
+}
+.top_pad {
+	padding-top: 0px !important;
+}
+.bottom_pad {
+	padding-bottom: 5px !important;
+}
+.fullwidth {
+	width: 100% !important;
+	max-width: 600px !important;
+	text-align: center !important;
+}
+		.mobile-padding {
+		padding-right: 30px !important;
+	}
+			.m_padding {
+		padding-left: 18px !important;
+				padding-right: 18px !important;
+	}
+}
+</style>
+           <title></title>
+           </head>
+           <!--INLINE BODY STYLE-->
+           <body bgcolor="#F8F8F8" style="-webkit-text-size-adjust:none; width: 100% !important; margin:0; overflow-y:scroll;  padding: 0;">
+           <!--THIS IS THE 100% WRAPPER TABLE-->
+           <table align="center" bgcolor="#F8F8F8" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0;" width="100%">
+	<tr>
+		<td align="center" style="margin:0;" valign="top" width="100%">
+			<!--THIS IS THE 620px CONTAINER TABLE-->
+
+
+			<table align="center" border="0" cellpadding="0" cellspacing="0" style="max-width:600px !important;">
+				<tr>
+					<td align="center" style="margin:0; vertical-align:top; max-width:600px !important;">
+						<!--THESE ARE THE CONTENT TABLES -THE TABLES ABOVE ARE THE CONTAINING AND WRAPPER TABLES--><!--[if (gte mso 9)|(IE)]>
+<table width="600" style="max-width:600px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td>
+<![endif]--><!--Framing Containing Table-->
+
+
+						<table align="center" border="0" cellpadding="" cellspacing="0" style="padding-top:0px; margin:0; background-color: #FFFFFF;" width="100%">
+							<!--BEGIN CONTENT-->
+
+							<tr>
+								<td align="left" bgcolor="#357AD8" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="padding-top:12px; padding-bottom:12px; padding-left:20px; padding-right:10px; background-image:url(http://email-assets.jobcase.com/jc/2760-repeating-blue-stripes.png);" valign="middle" width="100%">
+									<a href="%%=RedirectTo('https://www.jobcase.com/r/profile')=%%">
+									<table align="left" border="0" cellpadding="0" cellspacing="0" height="0" width="100%">
+										<tr>
+											<td style="color:#FFFFFF; font-family: Arial, Helvetica, sans-serif; font-size:19px; line-height:23px; font-weight:bold; border:none;"><img alt="" border="0" height="36" src="http://email-assets.jobcase.com/jc_logo_white_x.png" style="display:block;" width="110">
+											</td>
+
+											<td align="right" border="0" cellpadding="0" cellspacing="0" id="smaller2" style=" font-size:14px; padding-top:12px; padding-bottom:12px; padding-left:10px; padding-right:10px; color:#FFFFFF; font-family:'Roboto', Arial, Helvetica, sans-serif; max-width:240px !important; text-transform: uppercase; font-weight:700" valign="middle" width="50%">Job Alert!</td>
+										</tr>
+									</table></a>
+								</td>
+							</tr>
+%%[
+/**************************************************
+SEARCH BAR -- RECOMMENDED JOB SEARCH VARIANT ONLY
+***************************************************/
+]%%
+%%[IF @test_group != 'A' THEN]%%
+						<tr>
+							<td align="left" border="0" class="m_padding" bgcolor="#E6EDF4" cellpadding="0" cellspacing="0" id="smaller2" style="padding-top:20px; padding-bottom:15px; padding-left:20px; padding-right:20px;" valign="middle" width="100%">
+								<a href="%%=RedirectTo(@searchURL)=%%">
+								<table align="left"   border="0" cellpadding="0" cellspacing="0" height="40" width="100%">
+									<tr>
+										%%[IF EMPTY(@queryterm) AND EMPTY(@queryloc) THEN]%%
+										<td align="left" class="search-size" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="color:#454E54; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:14px; font-weight:400; border:1px solid #D3D7DC; border-right:1px solid #ffffff; padding:5px 15px 5px 15px;" valign="middle" width="100%"><span style="font-weight:700;">
+										%%[ELSEIF EMPTY(@queryterm) THEN]%%
+										<td align="left" class="search-size" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="color:#454E54; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:14px; font-weight:400; border:1px solid #D3D7DC; border-right:1px solid #ffffff; padding:5px 15px 5px 15px;" valign="middle" width="100%"><span style="font-weight:700;">%%=v(@queryloc)=%%</td>
+										%%[ELSEIF EMPTY(@queryloc) THEN]%%
+										<td align="left" class="search-size" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="color:#454E54; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:14px; font-weight:400; border:1px solid #D3D7DC; border-right:1px solid #ffffff; padding:5px 15px 5px 15px;" valign="middle" width="100%"><span style="font-weight:700;">%%=v(@queryterm)=%%</span></td>
+										%%[ELSE]%%
+										<td align="left" class="search-size" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="color:#454E54; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:14px; font-weight:400; border:1px solid #D3D7DC; border-right:1px solid #ffffff; padding:5px 15px 5px 15px;" valign="middle" width="100%"><span style="font-weight:700;">%%=v(@queryterm)=%%</span> in %%=v(@queryloc)=%%</td>
+										%%[ENDIF]%%
+										<td align="center" bgcolor="#3172D4" border="0" cellpadding="0" cellspacing="0" width="40" id="smaller2" style="width:40px;" valign="middle"><img border="0" src="http://email-assets.jobcase.com/jc/3327-search-icon-sq.png" width="40" height="40" style="padding:0; border:0;"></td>
+
+									</tr>
+								</table></a>
+							</td>
+						</tr>
+					%%[IF @remote_test_group == 'test1' THEN]%%
+						<tr>
+							<td align="left" bgcolor="#E6EDF4" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="padding-top:10px; padding-bottom:5px; padding-left:40px; padding-right:40px;" valign="middle" width="100%">
+								<table align="left" border="0" cellpadding="0" cellspacing="0" height="0" width="100%">
+									<tr>
+										<td align="center" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="color:#454E54; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:16px; font-weight:400;" valign="middle" width="100%">%%=v(@remote_copy)=%%<a href="%%=redirectTo(@remote_search_url)=%%" style="text-decoration: underline; color:#0e74df"> View&nbsp;remote&nbsp;jobs</a>.</td>
+									</tr>
+								</table></a>
+							</td>
+						</tr>
+					%%[ENDIF]%%
+%%[ENDIF]%%
+
+%%[
+
+/*************************************************
+NO SEARCH BAR -- PROFILE INTERESTS VARIANT ONLY
+**************************************************/
+
+IF @test_group == 'A' THEN
+]%%
+							<tr>
+								<td align="left" bgcolor="#E6EDF4" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="padding-top:20px; padding-bottom:5px; padding-left:40px; padding-right:40px;" valign="middle" width="100%">
+									<table align="left" border="0" cellpadding="0" cellspacing="0" height="0" width="100%">
+										<tr>
+											<td align="center" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="color:#68757E; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:16px; font-weight:400;" valign="middle" width="100%">You are receiving job alerts for &ldquo;%%=v(@jobSearchQueryParameter)=%%&rdquo;<br> Interested in something else? <a href="https://www.jobcase.com/profile/work-preferences/edit" style="text-decoration: underline; color:#68757E">Edit&nbsp;your&nbsp;work&nbsp;preferences</a>.</td>
+										</tr>
+									</table></a>
+								</td>
+							</tr>
+%%[ENDIF]%%
+
+%%[
+
+/*********************
+SHOW COMPANY SECTION
+**********************/
+
+IF @companyCreative == 'B' THEN
+]%%
+
+%%[
+	/*************************
+	SET COMPANY SECTION HEADER
+	**************************/
+	IF(NOT EMPTY(@FNAME)) THEN SET @caps = ", "
+		ELSE SET @caps = ""
+	ENDIF
+  SET @blueText = concat(@FNAME, @caps, @subjectCompany, " job openings for you!")
+]%%
+
+							<tr>
+								<td align="left" bgcolor="#E6EDF4" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="padding-top:20px; padding-bottom:15px; padding-left:30px; padding-right:40px;" valign="middle" width="100%">
+									<a href="%%=RedirectTo(@searchURL)=%%">
+									<table align="left" border="0" cellpadding="0" cellspacing="0" height="0" width="100%">
+										<tr>
+											<td align="center" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:23px; line-height:28px; font-weight:500;" valign="middle" width="100%">%%=v(@blueText)=%%</td>
+										</tr>
+									</table></a>
+								</td>
+							</tr>
+
+
+
+						    <tr>
+								<td class="m_padding" align="center" background="" bgcolor="#E6EDF4"  colspan="2" style="padding-top:5px; padding-bottom:0px; padding-left:25px; padding-right:25px; text-align: center; font-size: 0; padding-bottom: 0px;" valign="top">
+
+
+
+
+
+										<table class="" align="center" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="vertical-align:middle; border: 5px solid #9AAAB7; " width="100%">
+											<tr>
+												<td colspan="2" align="left" height="80%" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:20px; padding-bottom:14px; padding-left:15px; padding-right:15px;" valign="middle"><img border="0" style="padding:0 0px 0px 0px; display:block;"  src="%%=v(@logo_q_url)=%%">
+													</td>
+
+											</tr>
+%%[
+	set @jobnum = 0
+	set @matchingJobs = 0
+]%%
+			   <!-- END SINGLE BLOCK -->
+		{{.datasource jobListings type=nested maxrows=15}}
+			{{.data}}
+				{"target" : "JsonVar.jobListings"}
+			{{/data}}
+
+%%[
+set @jobnum = Add(@jobnum,1)
+set @onet = treatascontent('{{onetSoc}}')
+set @jobkey = treatascontent('{{key}}')
+set @source = treatascontent('{{userVisibleJobSourceName}}')
+set @jobDescription = treatascontent('{{jobDescription}}')
+set @posteddate0 = treatascontent('{{postedDate}}')
+set @city = treatascontent('{{city}}')
+set @state = treatascontent('{{addressState}}')
+set @jobTitle = treatascontent('{{jobTitle}}')
+set @companyName = treatascontent('{{companyName}}')
+set @relevance = treatascontent('{{relevanceScore}}')
+
+set @today = FormatDate(now(),"MMM DD, YYYY")
+if NOT EMPTY(@posteddate0) then
+		SET @posteddate4 = FormatDate(@posteddate0,"MMM DD, YYYY")
+	If @posteddate4 == @today then set @posteddate = 'Today' else set @posteddate = concat('on ', @posteddate4) endif
+	set @posteddatestr = concat('Posted ',@posteddate)
+else set @posteddatestr = "Posted"
+endif
+
+
+
+
+SET @jobLink = concat('https://www.jobcase.com/r/jobs/',@jobkey,'/listing_check?iframe=false&jnum=val',@jobnum)
+/* find company logo image URL for job listing company */
+set @company_row = LookupRows("ENT.Company_Logo_Image_Names","company_name", @companyName)
+SET @company_row_value = IIF(rowcount(@company_row)== 0, "", Field(Row(@company_row,1),"logo_image_name"))
+SET @logo_url = IIF(NOT EMPTY(@company_row_value), concat("http://email-assets.jobcase.com/jc/company-logos-0318/jc-grid-logos/",@company_row_value,".jpg"), "http://email-assets.jobcase.com/jc/company-logos-0318/jc-grid-logos/generic_logo2.jpg")
+/*
+Should this listing be grouped with the SL companies atop the email?
+*/
+SET @isCompany = IIF(@logo_url == @logo_q_url, 'Y', 'N')
+
+
+
+/* show salary in SL and email */
+IF (IndexOf(treatascontent('{{salaryDescription}}'),'$') == 1) THEN
+	IF @salaryJobs == 0 THEN
+		SET @subjectLine1 = concat(treatascontent('{{companyName}}'), ' is hiring for jobs paying ',treatascontent('{{salaryDescription}}'),'.')
+		SET @salaryJobs = 1
+		if EMPTY(@fname) then
+			set @subjectLine = @subjectLine1
+		else
+			set @subjectLine = Concat(ProperCase(@fname), ", ",@subjectLine1)
+		endif
+	ENDIF
+	SET @paysLine = concat('Pays: ',treatascontent('{{salaryDescription}}'))
+ELSE
+	SET @paysLine = ""
+ENDIF
+
+IF @isCompany == 'Y' THEN
+set @matchingJobs = Add(@matchingJobs,1)]%%
+
+											<tr>
+											  <td colspan="2" align="left" valign="top" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:0px; padding-bottom:0px; padding-left:0px; padding-right:0px;" border="0" cellpadding="0" cellspacing="0">
+
+											  <a href="%%=RedirectTo(@jobLink)=%%" style="color:#353e44; text-decoration:none;">
+											  <table width="100%" border="0" cellspacing="0" cellpadding="0">
+
+											    <tr>
+												<td width="95%" align="left" valign="top" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:8px; padding-bottom:15px; padding-left:15px; padding-right:15px;" border="0" cellpadding="0" cellspacing="0">%%=v(@jobTitle)=%%<br>
+												<span style="color:#0e74df; font-size:15px;">%%=v(@companyName)=%%</span><br>
+												%%[IF NOT EMPTY(@city) AND NOT EMPTY (@state) THEN]%% <span style="font-size:14px; font-weight:300;">%%=v(@city)=%%, %%=v(@state)=%%</span><br> %%[ENDIF]%%
+												<span style="color:#8fa0a8; text-transform:uppercase; font-size:12px;font-weight:300;">%%=v(@posteddatestr)=%%</span>%%[IF NOT EMPTY(@paysLine) THEN]%%<br />%%=v(@paysLine)=%%%%[ENDIF]%%</td>
+												<td width="5%" align="right" valign="top" style="color:#FB8000; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:40px; line-height:20px; font-weight:700; margin:0; vertical-align:top; padding-top:15px; padding-bottom:0px; padding-left:10px; padding-right:15px;" border="0" cellpadding="0" cellspacing="0">&rsaquo;</td>
+											</tr>
+
+												  </table></a></td>
+										    </tr>
+
+%%[ENDIF]%%
+{{/datasource}}
+
+										</table>
+
+
+
+
+
+								</td>
+							</tr>
+	%%[IF @matchingJobs < @jobResultsCount THEN]%%
+								<tr>
+														<td align="center" bgcolor="#E6EDF4" border="0" cellpadding="0" cellspacing="0" colspan="3" style="margin:0; padding:10px; padding-top:35px; padding-bottom:0px; color:#353e44; font-family:Arial, Helvetica, sans-serif; font-size:16px; line-height:23px; font-weight: 700;">OTHER AVAILABLE JOBS</span>
+																	</td>
+
+
+													</tr>
+	%%[ENDIF]%%
+%%[ENDIF]%%
+
+%%[
+/*********************
+END COMPANY SECTION
+**********************/
+
+
+
+/*********************
+SHOW REST OF LISTINGS
+(not in company section)
+**********************/
+
+/*****************************************************
+START LISTINGS ABOVE Keyword Rec Section
+*****************************************************/
+]%%
+
+%%[set @jobnum = 0]%%
+			   <!-- END SINGLE BLOCK -->
+
+		{{.datasource jobListings type=nested maxrows=15}}
+			{{.data}}
+				{"target" : "JsonVar.jobListings"}
+			{{/data}}
+
+%%[
+set @onet = treatascontent('{{onetSoc}}')
+set @jobkey = treatascontent('{{key}}')
+set @source = treatascontent('{{userVisibleJobSourceName}}')
+set @jobDescription = treatascontent('{{jobDescription}}')
+set @posteddate0 = treatascontent('{{postedDate}}')
+set @city = treatascontent('{{city}}')
+set @state = treatascontent('{{addressState}}')
+set @jobTitle = treatascontent('{{jobTitle}}')
+set @companyName = treatascontent('{{companyName}}')
+set @relevance = treatascontent('{{relevanceScore}}')
+
+set @today = FormatDate(now(),"MMM DD, YYYY")
+if NOT EMPTY(@posteddate0) then
+
+		SET @posteddate4 = FormatDate(@posteddate0,"MMM DD, YYYY")
+
+
+	If @posteddate4 == @today then set @posteddate = 'Today' else set @posteddate = concat('on ', @posteddate4) endif
+	set @posteddatestr = concat('Posted ',@posteddate)
+else set @posteddatestr = "Posted"
+endif
+
+SET @jobLink = concat('https://www.jobcase.com/r/jobs/',@jobkey,'/listing_check?iframe=false&jnum=val',@jobnum)
+
+/* find company logo image URL for job listing company */
+set @company_row = LookupRows("ENT.Company_Logo_Image_Names","company_name", @companyName)
+SET @company_row_value = IIF(rowcount(@company_row)== 0, "", Field(Row(@company_row,1),"logo_image_name"))
+SET @logo_url = IIF(NOT EMPTY(@company_row_value), concat("http://email-assets.jobcase.com/jc/company-logos-0318/jc-grid-logos/",@company_row_value,".jpg"), "http://email-assets.jobcase.com/jc/company-logos-0318/jc-grid-logos/generic_logo2.jpg")
+SET @isCompany = IIF(@logo_url == @logo_q_url, 'Y', 'N')
+
+
+
+/* show salary in SL and email (if begins with $ and is a non-zero value) */
+IF (IndexOf(treatascontent('{{salaryDescription}}'),'$') == 1 AND IndexOf(treatascontent('{{salaryDescription}}'),'0') != 2) THEN
+	IF @salaryJobs == 0 THEN
+		SET @subjectLine1 = concat(treatascontent('{{companyName}}'), ' is hiring for jobs paying ',treatascontent('{{salaryDescription}}'),'.')
+		SET @salaryJobs = 1
+		if EMPTY(@fname) then
+			set @subjectLine = @subjectLine1
+		else
+			set @subjectLine = Concat(ProperCase(@fname), ", ",@subjectLine1)
+		endif
+	ENDIF
+	SET @paysLine = concat('Pays: ',treatascontent('{{salaryDescription}}'))
+ELSE
+	SET @paysLine = ""
+ENDIF
+
+IF @isCompany == 'N' or @companyCreative == 'A' THEN
+set @jobnum = Add(@jobnum,1)
+
+/*****************************************************
+(ignore company section listings this time looping through)
+renumber the rest 1 through N (# non company listings)
+*****************************************************/
+
+
+/*****************************************************
+ONLY SHOW LISTINGS ABOVE Keyword Rec Section
+*****************************************************/
+IF @jobnum <= @keyword_section_placement THEN
+]%%
+							%%[
+							/*****************************************************************
+							LEFT COLUMN (odd-numbered) LISTINGS (on non-mobile)
+							-- minus the last listing when ODD total # of listings
+							-- this last listing will be centered at the bottom
+							******************************************************************/
+							IF Mod(@jobnum,2)==1 THEN
+							]%%
+
+
+
+																				  <tr>
+								<td background="" bgcolor="#E6EDF4" class="mobile-padding" colspan="2" style="padding-top:5px; padding-bottom:0px; padding-left:10px; padding-right:10px; text-align: center; font-size: 0; padding-bottom: 0px;" valign="top">
+									<!--[if (gte mso 9)|(IE)]>
+            <table width="100%" align="center" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                    <td>
+            <![endif]-->
+
+
+									<div class="fullwidthnon" style="width:260px; display: inline-block; vertical-align: top; padding:10px;">
+										<a href="%%=RedirectTo(@jobLink)=%%" style="color:#353e44; text-decoration:none;">
+										<table class="height-fix" align="left" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="vertical-align:middle; border-top:3px solid #fb8000; box-shadow: 2px 2px 4px -1px rgba(0,0,0,0.23);" width="100%">
+										%%[IF NOT EMPTY(@logo_url) THEN]%%
+										<tr>
+												<td align="left" height="40" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:25px; padding-bottom:0px; padding-left:15px; padding-right:15px;" valign="middle"><img border="0" style="padding:0 0px 0px 0px; display:block;"  src="%%=v(@logo_url)=%%">
+													</td>
+										</tr>
+										%%[ENDIF]%%
+											<tr>
+												<td align="left" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:16px; padding-bottom:15px; padding-left:15px; padding-right:15px;" valign="middle">
+													%%=v(@jobTitle)=%%<br>
+												<span style="color:#0e74df; font-size:15px;">%%=v(@companyName)=%%</span><br>
+												%%[IF NOT EMPTY(@city) AND NOT EMPTY (@state) THEN]%% <span style="font-size:14px; font-weight:300;">%%=v(@city)=%%, %%=v(@state)=%%</span><br> %%[ENDIF]%%
+												<span style="color:#8fa0a8; text-transform:uppercase; font-size:12px;font-weight:300;">%%=v(@posteddatestr)=%%</span>%%[IF NOT EMPTY(@paysLine) THEN]%%<br />%%=v(@paysLine)=%%%%[ENDIF]%%</td>
+											</tr>
+
+
+											<tr>
+												<td align="right" height="45" bgcolor="#F8F8F8" border="0" cellpadding="0" cellspacing="0" class="bottom_pad" style=" color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:30px; line-height:35px; font-weight:700; margin:0; vertical-align:middle; padding-top:10px; padding-bottom:10px; padding-right:10px;" valign="middle">
+													<table align="right" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; border-radius:4px;" valign="top" width="100">
+														<tr>
+															<td align="center" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; font-size:16px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; line-height:16px; border-radius:4px; font-weight:700;padding-top: 2px;" valign="middle" width="100"><span style="font-size:12px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><span style="color:#ffffff;">View Job</span></span>
+															</td>
+														</tr>
+													</table>
+												</td>
+											</tr>
+										</table></a>
+									</div>
+							%%[
+							/*****************************************************************
+							RIGHT COLUMN (even-numbered) LISTINGS (on non-mobile)
+							******************************************************************/
+							ELSEIF Mod(@jobnum,2)==0 THEN
+							]%%
+									<!--[if (gte mso 9)|(IE)]>
+                    </td>
+                </tr>
+            </table>
+            <![endif]-->
+
+
+									<div class="fullwidthnon" style="width:260px; display: inline-block; vertical-align: top; padding:10px;">
+										<a href="%%=RedirectTo(@jobLink)=%%" style="color:#353e44; text-decoration:none;">
+											<table class="height-fix" align="left" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="vertical-align:middle; border-top:3px solid #fb8000; box-shadow: 2px 2px 4px -1px rgba(0,0,0,0.23);" width="100%">
+											%%[IF NOT EMPTY(@logo_url) THEN]%%
+										<tr>
+												<td align="left" height="40" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:25px; padding-bottom:0px; padding-left:15px; padding-right:15px;" valign="middle"><img border="0" style="padding:0 0px 0px 0px; display:block;"  src="%%=v(@logo_url)=%%">
+													</td>
+										</tr>
+										%%[ENDIF]%%
+											<tr>
+												<td align="left" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:16px; padding-bottom:15px; padding-left:15px; padding-right:15px;" valign="middle">
+													%%=v(@jobTitle)=%%<br>
+												<span style="color:#0e74df; font-size:15px;">%%=v(@companyName)=%%</span><br>
+												%%[IF NOT EMPTY(@city) AND NOT EMPTY (@state) THEN]%% <span style="font-size:14px; font-weight:300;">%%=v(@city)=%%, %%=v(@state)=%%</span><br> %%[ENDIF]%%
+												<span style="color:#8fa0a8; text-transform:uppercase; font-size:12px;font-weight:300;">%%=v(@posteddatestr)=%%</span>%%[IF NOT EMPTY(@paysLine) THEN]%%<br />%%=v(@paysLine)=%%%%[ENDIF]%%</td>
+											</tr>
+
+											<tr>
+												<td align="right" bgcolor="#F8F8F8" border="0" cellpadding="0" cellspacing="0" class="bottom_pad" style=" color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:30px; line-height:35px; font-weight:700; margin:0; vertical-align:middle; padding-top:10px; padding-bottom:10px; padding-right:10px;" valign="middle" height="45">
+													<table align="right" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; border-radius:4px;" valign="top" width="100">
+														<tr>
+															<td align="center" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; font-size:16px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; line-height:16px; border-radius:4px; font-weight:700;padding-top: 2px;" valign="middle" width="100"><span style="font-size:12px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><span style="color:#ffffff;">View Job</span></span>
+															</td>
+														</tr>
+													</table>
+												</td>
+											</tr>
+										</table></a>
+									</div>
+									<!--[if (gte mso 9)|(IE)]>
+            </td>
+            <td>
+            <![endif]-->
+								</td>
+							</tr>
+
+							%%[ENDIF]%%
+							%%[ENDIF]%%
+
+							%%[ENDIF]%%
+							{{/datasource}}
+
+							%%[
+							/**************************
+							END SECTION ABOVE KEYWORD RECS
+							***************************/
+
+
+							IF @n_keywords > 0 THEN
+							/**************************
+							START KEYWORD RECS SECTION
+							***************************/
+
+							]%%
+
+
+
+
+							<!-- BEGIN 3 KEYWORD BLOCK -->
+							<tr>
+								<td align="left" bgcolor="#E6EDF4" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="padding-top:20px; padding-bottom:15px; padding-left:20px; padding-right:20px;" valign="middle" width="100%">
+									<table align="left" border="0" cellpadding="0" cellspacing="0" height="0" width="100%">
+										<tr>
+											<td align="left" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:23px; line-height:28px; font-weight:400; padding-bottom: 10px;" valign="middle" width="100%">%%=v(@keyword_section_header)=%%</td>
+										</tr>
+
+
+										<tr>
+											<td align="left" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="margin:0; padding-top: 11px; padding-bottom: 11px; padding-left: 10px; padding-right: 10px; border-left-style: solid; border-left-color: #FF8F00; border-left-width: 5px; box-shadow: 2px 2px 4px -1px rgba(0,0,0,0.23);">
+												<table border="0" cellpadding="0" cellspacing="0" style="" width="100%">
+
+													%%[IF @remote_test_group == 'test2' THEN]%%
+																			<tr>
+																				<td class="" style="padding-left: 15px; padding-top: 3px; padding-bottom: 3px; border-bottom-style: solid; border-bottom-width: 1px; border-bottom-color: #d3d3d3;color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:17px; line-height:22px; font-weight:700;">
+																					<a href="%%=RedirectTo(@remote_search_url)=%%" style="font-family: 'Roboto', sans-serif; font-weight: 700; font-size: 18px; line-height: 33px; color: #353e44; text-decoration:none; text-decoration:none;">%%=v(@remote_query)=%% <span style="font-weight: 700; font-size: 24px; color:#FF8F00;">&rsaquo;</span></a>
+																				</td>
+																			</tr>
+													%%[ENDIF]%%
+%%[
+	for @i = 1 to @n_keywords do
+	  Set @row = Row(@keywords_rowset, @i)
+	  Set @keyword = Field(@row,1)
+		Set @keyword_search_url = concat("https://www.jobcase.com/jobs/results?q=",URLEncode(@keyword),"&l=",URLEncode(@queryloc))
+]%%
+
+													<tr>
+														<td class="" style="padding-left: 15px; padding-top: 3px; padding-bottom: 3px; %%[IF @i < @n_keywords THEN]%%border-bottom-style: solid; border-bottom-width: 1px; border-bottom-color: #d3d3d3;%%[ENDIF]%% color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:17px; line-height:22px; font-weight:700;">
+															<a href="%%=RedirectTo(@keyword_search_url)=%%" style="font-family: 'Roboto', sans-serif; font-weight: 700; font-size: 18px; line-height: 33px; color: #353e44; text-decoration:none; text-decoration:none;">%%=v(@keyword)=%% <span style="font-weight: 700; font-size: 24px; color:#FF8F00;">&rsaquo;</span></a>
+														</td>
+													</tr>
+
+%%[next @i]%%
+
+												</table>
+											</td>
+										</tr>
+									</table>
+								</td>
+							</tr>
+						<!-- BEGIN 3 KEYWORD BLOCK -->
+
+
+							%%[
+
+							/**************************
+							END KEYWORD RECS SECTION
+							***************************/
+							ENDIF
+
+							/*****************************************************
+							START LISTINGS BELOW Keyword Rec Section
+							*****************************************************/
+							]%%
+
+							%%[set @jobnum = 0]%%
+										   <!-- END SINGLE BLOCK -->
+
+									{{.datasource jobListings type=nested maxrows=15}}
+										{{.data}}
+											{"target" : "JsonVar.jobListings"}
+										{{/data}}
+
+							%%[
+							set @onet = treatascontent('{{onetSoc}}')
+							set @jobkey = treatascontent('{{key}}')
+							set @source = treatascontent('{{userVisibleJobSourceName}}')
+							set @jobDescription = treatascontent('{{jobDescription}}')
+							set @posteddate0 = treatascontent('{{postedDate}}')
+							set @city = treatascontent('{{city}}')
+							set @state = treatascontent('{{addressState}}')
+							set @jobTitle = treatascontent('{{jobTitle}}')
+							set @companyName = treatascontent('{{companyName}}')
+							set @relevance = treatascontent('{{relevanceScore}}')
+
+							set @today = FormatDate(now(),"MMM DD, YYYY")
+							if NOT EMPTY(@posteddate0) then
+
+									SET @posteddate4 = FormatDate(@posteddate0,"MMM DD, YYYY")
+
+
+								If @posteddate4 == @today then set @posteddate = 'Today' else set @posteddate = concat('on ', @posteddate4) endif
+								set @posteddatestr = concat('Posted ',@posteddate)
+							else set @posteddatestr = "Posted"
+							endif
+
+							SET @jobLink = concat('https://www.jobcase.com/r/jobs/',@jobkey,'/listing_check?iframe=false&jnum=val',@jobnum)
+
+							/* find company logo image URL for job listing company */
+							set @company_row = LookupRows("ENT.Company_Logo_Image_Names","company_name", @companyName)
+							SET @company_row_value = IIF(rowcount(@company_row)== 0, "", Field(Row(@company_row,1),"logo_image_name"))
+							SET @logo_url = IIF(NOT EMPTY(@company_row_value), concat("http://email-assets.jobcase.com/jc/company-logos-0318/jc-grid-logos/",@company_row_value,".jpg"), "http://email-assets.jobcase.com/jc/company-logos-0318/jc-grid-logos/generic_logo2.jpg")
+							SET @isCompany = IIF(@logo_url == @logo_q_url, 'Y', 'N')
+
+
+
+							/* show salary in SL and email */
+							IF (IndexOf(treatascontent('{{salaryDescription}}'),'$') == 1) THEN
+								IF @salaryJobs == 0 THEN
+									SET @subjectLine1 = concat(treatascontent('{{companyName}}'), ' is hiring for jobs paying ',treatascontent('{{salaryDescription}}'),'.')
+									SET @salaryJobs = 1
+									if EMPTY(@fname) then
+										set @subjectLine = @subjectLine1
+									else
+										set @subjectLine = Concat(ProperCase(@fname), ", ",@subjectLine1)
+									endif
+								ENDIF
+								SET @paysLine = concat('Pays: ',treatascontent('{{salaryDescription}}'))
+							ELSE
+								SET @paysLine = ""
+							ENDIF
+
+							IF @isCompany == 'N' or @companyCreative == 'A' THEN
+							set @jobnum = Add(@jobnum,1)
+
+							/*****************************************************
+							(ignore company section listings this time looping through)
+							renumber the rest 1 through N (# non company listings)
+							*****************************************************/
+
+							/*****************************************************
+							ONLY SHOW LISTINGS BELOW Keyword Rec Section
+							*****************************************************/
+							IF @jobnum > @keyword_section_placement THEN
+							]%%
+														%%[
+														/*****************************************************************
+														LEFT COLUMN (odd-numbered) LISTINGS (on non-mobile)
+														-- minus the last listing when ODD total # of listings
+														-- this last listing will be centered at the bottom
+														******************************************************************/
+														IF Mod(@jobnum,2)==1 and @jobnum < @jobResultsCount THEN
+														]%%
+
+
+
+																											  <tr>
+															<td background="" bgcolor="#E6EDF4" class="mobile-padding" colspan="2" style="padding-top:5px; padding-bottom:0px; padding-left:10px; padding-right:10px; text-align: center; font-size: 0; padding-bottom: 0px;" valign="top">
+																<!--[if (gte mso 9)|(IE)]>
+							            <table width="100%" align="center" cellpadding="0" cellspacing="0" border="0">
+							                <tr>
+							                    <td>
+							            <![endif]-->
+
+
+																<div class="fullwidthnon" style="width:260px; display: inline-block; vertical-align: top; padding:10px;">
+																	<a href="%%=RedirectTo(@jobLink)=%%" style="color:#353e44; text-decoration:none;">
+																	<table class="height-fix" align="left" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="vertical-align:middle; border-top:3px solid #fb8000; box-shadow: 2px 2px 4px -1px rgba(0,0,0,0.23);" width="100%">
+																	%%[IF NOT EMPTY(@logo_url) THEN]%%
+																	<tr>
+																			<td align="left" height="40" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:25px; padding-bottom:0px; padding-left:15px; padding-right:15px;" valign="middle"><img border="0" style="padding:0 0px 0px 0px; display:block;"  src="%%=v(@logo_url)=%%">
+																				</td>
+																	</tr>
+																	%%[ENDIF]%%
+																		<tr>
+																			<td align="left" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:16px; padding-bottom:15px; padding-left:15px; padding-right:15px;" valign="middle">
+																				%%=v(@jobTitle)=%%<br>
+																			<span style="color:#0e74df; font-size:15px;">%%=v(@companyName)=%%</span><br>
+																			%%[IF NOT EMPTY(@city) AND NOT EMPTY (@state) THEN]%% <span style="font-size:14px; font-weight:300;">%%=v(@city)=%%, %%=v(@state)=%%</span><br> %%[ENDIF]%%
+																			<span style="color:#8fa0a8; text-transform:uppercase; font-size:12px;font-weight:300;">%%=v(@posteddatestr)=%%</span>%%[IF NOT EMPTY(@paysLine) THEN]%%<br />%%=v(@paysLine)=%%%%[ENDIF]%%</td>
+																		</tr>
+
+
+																		<tr>
+																			<td align="right" height="45" bgcolor="#F8F8F8" border="0" cellpadding="0" cellspacing="0" class="bottom_pad" style=" color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:30px; line-height:35px; font-weight:700; margin:0; vertical-align:middle; padding-top:10px; padding-bottom:10px; padding-right:10px;" valign="middle">
+																				<table align="right" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; border-radius:4px;" valign="top" width="100">
+																					<tr>
+																						<td align="center" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; font-size:16px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; line-height:16px; border-radius:4px; font-weight:700;padding-top: 2px;" valign="middle" width="100"><span style="font-size:12px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><span style="color:#ffffff;">View Job</span></span>
+																						</td>
+																					</tr>
+																				</table>
+																			</td>
+																		</tr>
+
+																	</table></a>
+																</div>
+														%%[
+														/*****************************************************************
+														RIGHT COLUMN (even-numbered) LISTINGS (on non-mobile)
+														******************************************************************/
+														ELSEIF Mod(@jobnum,2)==0 THEN
+														]%%
+																<!--[if (gte mso 9)|(IE)]>
+							                    </td>
+							                </tr>
+							            </table>
+							            <![endif]-->
+
+
+																<div class="fullwidthnon" style="width:260px; display: inline-block; vertical-align: top; padding:10px;">
+																	<a href="%%=RedirectTo(@jobLink)=%%" style="color:#353e44; text-decoration:none;">
+																		<table class="height-fix" align="left" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="vertical-align:middle; border-top:3px solid #fb8000; box-shadow: 2px 2px 4px -1px rgba(0,0,0,0.23);" width="100%">
+																		%%[IF NOT EMPTY(@logo_url) THEN]%%
+																	<tr>
+																			<td align="left" height="40" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:25px; padding-bottom:0px; padding-left:15px; padding-right:15px;" valign="middle"><img border="0" style="padding:0 0px 0px 0px; display:block;"  src="%%=v(@logo_url)=%%">
+																				</td>
+																	</tr>
+																	%%[ENDIF]%%
+																		<tr>
+																			<td align="left" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:16px; padding-bottom:15px; padding-left:15px; padding-right:15px;" valign="middle">
+																				%%=v(@jobTitle)=%%<br>
+																			<span style="color:#0e74df; font-size:15px;">%%=v(@companyName)=%%</span><br>
+																			%%[IF NOT EMPTY(@city) AND NOT EMPTY (@state) THEN]%% <span style="font-size:14px; font-weight:300;">%%=v(@city)=%%, %%=v(@state)=%%</span><br> %%[ENDIF]%%
+																			<span style="color:#8fa0a8; text-transform:uppercase; font-size:12px;font-weight:300;">%%=v(@posteddatestr)=%%</span>%%[IF NOT EMPTY(@paysLine) THEN]%%<br />%%=v(@paysLine)=%%%%[ENDIF]%%</td>
+																		</tr>
+
+
+
+																		<tr>
+																			<td align="right" bgcolor="#F8F8F8" border="0" cellpadding="0" cellspacing="0" class="bottom_pad" style=" color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:30px; line-height:35px; font-weight:700; margin:0; vertical-align:middle; padding-top:10px; padding-bottom:10px; padding-right:10px;" valign="middle" height="45">
+																				<table align="right" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; border-radius:4px;" valign="top" width="100">
+																					<tr>
+																						<td align="center" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; font-size:16px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; line-height:16px; border-radius:4px; font-weight:700;padding-top: 2px;" valign="middle" width="100"><span style="font-size:12px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><span style="color:#ffffff;">View Job</span></span>
+																						</td>
+																					</tr>
+																				</table>
+																			</td>
+																		</tr>
+
+																	</table></a>
+																</div>
+																<!--[if (gte mso 9)|(IE)]>
+							            </td>
+							            <td>
+							            <![endif]-->
+															</td>
+														</tr>
+														%%[
+														/*****************************************************************
+														LAST LISTING (odd-numbered) (centered on non-mobile)
+														******************************************************************/
+														ELSE
+														]%%
+														<!-- BEGIN SINGLE BLOCK -->
+
+											 <tr>
+															<td background="" bgcolor="#E6EDF4" class="mobile-padding" colspan="2" style="padding-top:10px; padding-bottom:0px; padding-left:10px; padding-right:10px; text-align: center; font-size: 0; padding-bottom: 0px;" valign="top">
+																<!--[if (gte mso 9)|(IE)]>
+							            <table width="100%" align="center" cellpadding="0" cellspacing="0" border="0">
+							                <tr>
+							                    <td>
+							            <![endif]-->
+
+
+																<div class="fullwidthnon" style="width:260px; display: inline-block; vertical-align: top; padding:10px; ">
+																	<a href="%%=RedirectTo(@jobLink)=%%" style="color:#353e44; text-decoration:none;">
+																		<table class="height-fix" align="left" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="vertical-align:middle; border-top:3px solid #fb8000; box-shadow: 2px 2px 4px -1px rgba(0,0,0,0.23);" width="100%">
+																		%%[IF NOT EMPTY(@logo_url) THEN]%%
+																	<tr>
+																			<td align="left" height="40" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:25px; padding-bottom:0px; padding-left:15px; padding-right:15px;" valign="middle"><img border="0" style="padding:0 0px 0px 0px; display:block;"  src="%%=v(@logo_url)=%%">
+																				</td>
+																	</tr>
+																	%%[ENDIF]%%
+																		<tr>
+																			<td align="left" border="0" cellpadding="0" cellspacing="0" style="color:#353e44; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:20px; font-weight:700; margin:0; vertical-align:middle; padding-top:16px; padding-bottom:15px; padding-left:15px; padding-right:15px;" valign="middle">
+																				%%=v(@jobTitle)=%%<br>
+																			<span style="color:#0e74df; font-size:15px;">%%=v(@companyName)=%%</span><br>
+																			%%[IF NOT EMPTY(@city) AND NOT EMPTY (@state) THEN]%% <span style="font-size:14px; font-weight:300;">%%=v(@city)=%%, %%=v(@state)=%%</span><br> %%[ENDIF]%%
+																			<span style="color:#8fa0a8; text-transform:uppercase; font-size:12px;font-weight:300;">%%=v(@posteddatestr)=%%</span>%%[IF NOT EMPTY(@paysLine) THEN]%%<br />%%=v(@paysLine)=%%%%[ENDIF]%%</td>
+																		</tr>
+
+
+
+																		<tr>
+																			<td align="right" height="45" bgcolor="#F8F8F8" border="0" cellpadding="0" cellspacing="0" class="bottom_pad" style=" color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:30px; line-height:35px; font-weight:700; margin:0; vertical-align:middle; padding-top:10px; padding-bottom:10px; padding-right:10px;" valign="middle">
+																				<table align="right" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; border-radius:4px;" valign="top" width="100">
+																					<tr>
+																						<td align="center" bgcolor="#FB8000" border="0" cellpadding="0" cellspacing="0" height="35" style="margin:0; font-size:16px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; line-height:16px; border-radius:4px; font-weight:700;padding-top: 2px;" valign="middle" width="100"><span style="font-size:12px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><span style="color:#ffffff;">View Job</span></span>
+																						</td>
+																					</tr>
+																				</table>
+																			</td>
+																		</tr>
+
+																	</table></a>
+																</div>
+																<!--[if (gte mso 9)|(IE)]>
+							                    </td>
+							                </tr>
+							            </table>
+							            <![endif]-->
+
+
+																<!--[if (gte mso 9)|(IE)]>
+							            </td>
+							            <td>
+							            <![endif]-->
+															</td>
+														</tr>
+
+										   <!-- END SINGLE BLOCK -->
+														%%[ENDIF]%%
+														%%[ENDIF]%%
+
+														%%[ENDIF]%%
+														{{/datasource}}
+														%%[
+														/**************************
+														END SECTION BELOW KEYWORD RECS
+														***************************/
+														]%%
+
+
+							%%[
+							/**************************
+							END REST OF LISTINGS SECTION
+							(those not in company section)
+							***************************/
+							]%%
+
+
+
+
+
+
+<tr>
+														<td align="center" bgcolor="#E6EDF4" border="0" cellpadding="0" cellspacing="0" colspan="3" style="margin:0; padding:10px; padding-bottom:8px; color:#222222; font-family:Arial, Helvetica, sans-serif; font-size:19px; line-height:23px; padding-top:38px;">
+ 														<a href="%%=RedirectTo(@searchURL)=%%" style="color:#333333; text-decoration:none;">
+															<table align="center" bgcolor="#357AD8" border="0" cellpadding="0" cellspacing="0" height="40" style="margin:0; border-radius:4px;" valign="top" width="220">
+																<tr>
+																	<td align="center" bgcolor="#357AD8" border="0" cellpadding="0" cellspacing="0" height="50" style="margin:0; font-size:18px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; line-height:16px; border-radius:10px; font-weight:700;" valign="middle" width="220"><span style="font-size:15px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; line-height:16px; text-transform: none;">See All Jobs Near You</span>
+																	</td>
+																</tr>
+															</table>
+															</a>
+														</td>
+
+													</tr>
+													<tr>
+														<td align="center" bgcolor="#E6EDF4" border="0" cellpadding="0" cellspacing="0" colspan="3" style="margin:0; padding:10px; padding-top:0px; padding-bottom:30px; color:#222222; font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:23px;">
+ 														<a href="%%=RedirectTo(@editLink)=%%" style="color:#8fa0a8; text-decoration:underline;">
+															Change alert preferences ›</span>
+																	</td>
+
+
+													</tr>
+
+
+							<tr>
+								<td align="center" bgcolor="#F8F8F8" colspan="2" style="padding-top:30px; padding-left:0px; padding-right:0px; color:#666666; font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:14px; font-weight:normal;">%%=ContentArea("180")=%%</td>
+							</tr>
+						</table>
+						<!--[if (gte mso 9)|(IE)]>
+        </td>
+    </tr>
+</table>
+<![endif]-->
+					</td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+</table>
+           </body>
+           <custom name="opencounter" type="tracking">
+           </html>
+
+{{/datasource}}

@@ -1,0 +1,780 @@
+%%[
+          /* Pull profile photo url for header */
+          SET @profile_photo_array_1 = LookupRows("ENT.PM_Master_Subscriber_Data", "user_entered_email", lowercase([EmailAddress]))
+          SET @profile_photo_value_1 = IIF(rowcount(@profile_photo_array_1)== 0, "", Field(Row(@profile_photo_array_1,1),"profile_user_entered_photo"))
+          SET @profile_photo_url_1 = IIF(NOT EMPTY(@profile_photo_value_1), TRIM(@profile_photo_value_1), 'http://email-assets.jobcase.com/empty_pic.jpg')
+
+          SET @zip = IIF(rowcount(@profile_photo_array_1)== 0, "", Field(Row(@profile_photo_array_1,1),"user_entered_zip_code"))
+          SET @city = IIF(rowcount(@profile_photo_array_1)== 0, "", Field(Row(@profile_photo_array_1,1),"user_computed_city"))
+          SET @state = IIF(rowcount(@profile_photo_array_1)== 0, "", Field(Row(@profile_photo_array_1,1),"user_computed_state"))
+
+          SET @location_parameter = IIF(NOT EMPTY(@zip)
+          ,@zip
+          ,concat(@city, ", ",@state)
+          )
+
+
+          SET @subscriber_fname = IIF(rowcount(@profile_photo_array_1)== 0, "", Field(Row(@profile_photo_array_1,1),"user_entered_first_name"))
+          SET @fname = IIF(NOT EMPTY([arrivalRecipientFirstName]), ProperCase([arrivalRecipientFirstName]),
+          IIF(NOT EMPTY(@subscriber_fname), ProperCase(@subscriber_fname), ''))
+
+           SET @created_at = IIF(NOT EMPTY([createdAt]), [createdAt], '')
+           SET @random_ab_split = IIF(NOT EMPTY([randomAbSplit]), [randomAbSplit], '')
+           SET @random_ab_split100 = IIF(NOT EMPTY([randomAbSplit100]), [randomAbSplit100], '')
+           SET @creative = IIF(substring(md5(SubscriberKey),2,1)<'8','A','B')
+           SET @query = [registrationArrivalKeyword]
+           SET @teen_search = IIF(IndexOf(@query,'14')>0 or IndexOf(@query,'15')>0 or IndexOf(@query,'16')>0 or IndexOf(@query,'17')>0 or IndexOf(@query,'teen')>0,'A','B')
+           SET @delta_search = IIF(IndexOf(@query,'Delta')>0 or IndexOf(@query,'JetBlue')>0 or IndexOf(@query,'airport')>0,'A','B')
+           SET @union_search = IIF(@query=='Union Pacific','A','B')
+
+           /*
+           GMAIL-specific creative for inboxing
+           */
+           SET @ISP = lowercase(IIF(IndexOf([EmailAddr],'@')>0, substring([EmailAddr],IndexOf([EmailAddr],'@'),Add(Subtract(Length([EmailAddr]),IndexOf([EmailAddr],'@')),1)),'unknown'))
+
+--A/B Test 3/11 on different template etc; rollbacked to test1 control 50/50 split--
+--A/B Test Fred letter test v2 rolled out to 14/16 Test2 with 2/16 holdout on 04/16
+
+
+          SET @welcome_test_group = IIF(substring(md5(concat('xy20',md5([SubscriberKey]))),4,1)< '2', 'Holdout','Test2woFred')
+
+
+          IF @welcome_test_group == 'Test2woFred' THEN
+          SET @traffic_company = IIF(NOT EMPTY([jobCompanyName]), [jobCompanyName],
+              IIF(NOT EMPTY ([resultJobTitle]),[resultJobTitle],
+              IIF(NOT EMPTY ([resultJobCompanyName]),[resultJobCompanyName],
+              IIF(NOT EMPTY ([jobTitle]),[jobTitle],
+              IIF(NOT EMPTY ([registrationArrivalKeyword]),[registrationArrivalKeyword],'Remote')))))
+          ELSE
+          SET @traffic_company = IIF(NOT EMPTY([jobCompanyName]), [jobCompanyName],'')
+         ENDIF
+          <!-- SET @subject_line = IIF(NOT EMPTY(@fname)
+            , concat("Welcome ", @fname, "! You have 2 unread messages on Jobcase")
+            , "Welcome! You have 2 unread messages on Jobcase") -->
+
+
+          IF @ISP == '@msn.com' or @ISP == '@hotmail.com' or @ISP == '@live.com' or @ISP == '@outlook.com' THEN
+            SET @subject_line = IIF(NOT EMPTY(@fname), concat('Thanks and Congrats, ', @fname,'!'), 'Thanks and Congrats!')
+
+          ENDIF
+
+          <!-- IF @welcome_test_group == 'Control' AND @traffic_company != '' AND @location_parameter != ', ' THEN
+            SET @subject_line = IIF(NOT EMPTY(@fname)
+            , concat("Welcome ", @fname, "! Still interested in ", @traffic_company," jobs?")
+            , concat("Welcome! Still interested in ", @traffic_company," jobs?"))
+
+          ENDIF -->
+
+          SET @subject_line = IIF(NOT EMPTY(@fname)
+            , concat("Hi ", @fname, "! I saw your interest in ", @traffic_company," jobs")
+            , concat("Hi! I saw your interest in ", @traffic_company," jobs"))
+
+          IF @welcome_test_group == 'Holdout' AND (@traffic_company == '' OR @location_parameter == ', ') THEN
+            SET @subject_line = IIF(NOT EMPTY(@fname)
+             , concat("Welcome ", @fname, "! You have 2 unread messages on Jobcase")
+             , "Welcome! You have 2 unread messages on Jobcase")
+          ENDIF
+
+          IF ((@welcome_test_group == 'Test2woFred' AND @traffic_company == 'Remote')) THEN
+            SET @subject_line = IIF(NOT EMPTY(@fname)
+              , concat("Hi ", @fname, "! I saw your interest in jobs hiring near you")
+              , concat("Hi! I saw your interest in jobs hiring near you"))
+          ENDIF
+
+
+          IF @ISP == '@gmail.com' and @welcome_test_group != 'Holdout' THEN
+            SET @subject_line = IIF(NOT EMPTY(@fname), concat('Welcome, ',@fname,', you have a new message from Ashley on Jobcase'), 'Welcome, you have a new message from Ashley on Jobcase')
+          ENDIF
+
+
+           SET @landing_test_group = "B"
+
+           SET @header_url = IIF(@landing_test_group == 'A'
+           , 'https://www.jobcase.com/r/profile'
+           , IIF(NOT EMPTY(@query)
+            ,concat('https://www.jobcase.com/getting-started?kw=',@query)
+            ,'https://www.jobcase.com/getting-started'
+           )
+           )
+           SET @jobcase_features_url = IIF(@landing_test_group == 'A'
+           , 'https://www.jobcase.com/r'
+           , IIF(NOT EMPTY(@query)
+            ,concat('https://www.jobcase.com/getting-started?kw=',@query)
+            ,'https://www.jobcase.com/getting-started'
+           )
+           )
+           SET @confirm_url = IIF(@landing_test_group == 'A'
+           , 'https://www.jobcase.com/r/profile'
+           , IIF(NOT EMPTY(@query)
+            ,concat('https://www.jobcase.com/getting-started?kw=',@query)
+            ,'https://www.jobcase.com/getting-started'
+           )
+           )
+           SET @tour_site_url = IIF(@landing_test_group == 'A'
+           , 'https://www.jobcase.com/r/profile'
+           , IIF(NOT EMPTY(@query)
+            ,concat('https://www.jobcase.com/getting-started?kw=',@query)
+            ,'https://www.jobcase.com/getting-started'
+           )
+           )
+           SET @community_url = IIF(@landing_test_group == 'A'
+           , 'https://www.jobcase.com/community/feed'
+           , IIF(NOT EMPTY(@query)
+            ,concat('https://www.jobcase.com/getting-started?kw=',@query)
+            ,'https://www.jobcase.com/getting-started'
+           )
+           )
+
+
+
+SET @reg_domain = IIF(NOT EMPTY([registrationDomain]),[registrationDomain],"")
+
+SET @reg_site = IIF(@reg_domain == "jobsradar.com"
+,"JobsRadar"
+, IIF(@reg_domain == "jobhat.com"
+  ,"JobHat"
+  , IIF(@reg_domain == "jobcase.com"
+    ,"Jobcase"
+    , IIF(@reg_domain == "careerboutique.com"
+      ,"CareerBoutique"
+      , IIF(@reg_domain == "everyjobforme.com"
+        ,"EveryJobForMe"
+        ,IIF(@reg_domain == "speedyjobs.com"
+          ,"Speedy Jobs"
+          ,@reg_domain
+          )
+        )
+      )
+    )
+  )
+)
+SET @reg_created_at = IIF(NOT EMPTY([registrationCreatedAt]),[registrationCreatedAt],"")
+SET @FOOTER = IIF((@reg_domain == "jobcase.com") AND (NOT @reg_domain == "") AND (NOT @reg_created_at == "")
+, concat('Your Jobcase profile was originally created by you when you registered as a member of Jobcase on ',Format(@reg_created_at, "MMMM d, yyyy"),'.')
+, IIF((NOT @reg_domain == "") AND (NOT @reg_created_at == "")
+  ,concat('Your Jobcase profile was originally created by you when you registered as a member of ',@reg_site,' on ',Format(@reg_created_at, "MMMM d, yyyy"),'.  ',@reg_site,' has been powered by Jobcase technology since 2009.')
+  ,'Jobcase profiles are created and reserved by members when registering on either Jobcase or on any jobsites powered by Jobcase.'
+  )
+)
+
+IF @created_at >= '2019-08-19 10:00' AND @created_at < '2019-08-20 10:00'
+  AND lowercase(substring([SubscriberKey],6,1)) == 'a' or  lowercase(substring([SubscriberKey],6,1)) == 'b' or  lowercase(substring([SubscriberKey],6,1)) == 'c'
+  AND @ISP == '@gmail.com' THEN
+    RaiseError('Do not send to subscriber', true)
+ENDIF
+
+SET @praise_flow_url = 'https://www.jobcase.com/give-a-praise'
+SET @jobs_flow_url = concat('https://www.jobcase.com/jobs/results?l=', @location_parameter)
+SET @preferences_flow_url = 'https://www.jobcase.com/profile/work-preferences/edit?mm_flow=profile_prompt&prompt_target=interests'
+SET @community_flow_url = 'https://www.jobcase.com/community/feed'
+SET @profile_flow_url = 'https://www.jobcase.com/onboarding-resume/basic-info?resume_flow_variant=email_view_resume'
+SET @profile_url = 'https://www.jobcase.com/r/profile'
+SET @casemail_url = 'https://www.jobcase.com/r/activities/welcome_messages?mm_flow=case_welcome_message_organic'
+
+/* url variant 3/11 */
+IF @welcome_test_group == 'Holdout' OR @location_parameter == ', '
+THEN SET @company_jobs_flow_url = concat('https://www.jobcase.com/jobs/results?l=', @location_parameter, '&q=', URLEncode(replace(@traffic_company, "&", " ")))
+ELSE SET @company_jobs_flow_url = concat('https://www.jobcase.com/?confirm_email=true&jb_q=', URLEncode(replace(@traffic_company, "&", " ")), '&jb_l=', @location_parameter, '&jb_spk=A6xFXTn7qvgugKkvJLuoKd0Y')
+ENDIF
+
+SET @date_format = format(@reg_created_at, "MMMM d, yyyy")
+SET @displayed_location = IIF(NOT EMPTY(@city),concat(@city,", ",@state),@zip)
+SET @greeting = IIF(NOT EMPTY(@fname)
+            , concat("Hi ", @fname)
+            , concat("Hi"))
+
+IF @ISP == '@gmail.com' AND @reg_site == 'Jobcase' THEN
+  RaiseError('Do not send to subscriber', true)
+ENDIF
+
+
+/* Set an override footer on html attributes */
+SET @footer_text_color = "#FFFFFF"
+
+
+/* test to remove signature and change wording 0604*/
+SET @signature_test = IIF(substring(md5(concat('signAture',md5([SubscriberKey]))),5,1) < 'c','Control','Test')
+
+
+IF (@welcome_test_group == 'Holdout' AND @traffic_company != '' AND @location_parameter != ', ') OR @welcome_test_group == 'Test2woFred' THEN
+  SET @footer_text_color = "#333333"
+ENDIF
+]%%
+
+%%[SET @preheader = concat(@fname,' you have new suggested jobs ',@date_format)]%%
+
+%%[
+/*temp*/
+SET @welcome_test_group = 'Holdout'
+SET @traffic_company = ''
+SET @subject_line = IIF(NOT EMPTY(@fname)
+ , concat("Thanks and congrats", @fname, "!")
+ , "Thanks and congrates!")
+/*temp*/
+]%
+
+
+%%[IF (@welcome_test_group == 'Holdout') AND @traffic_company != '' AND @location_parameter != ', ' THEN]%%
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta name="viewport" content="initial-scale=1.0">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+
+  <!--[if mso]>
+<style>
+    * {
+      font-family: sans-serif !important;
+    }
+</style>
+<![endif]-->
+
+  <!--[if !mso]><!-->
+<link href="http://fonts.googleapis.com/css?family=Roboto:300,400,500,700" rel="stylesheet" type="text/css">
+<!--<![endif]-->
+
+<style type="text/css">
+body { margin:0 !important; }
+div[style*="margin: 16px 0"] { margin:0 !important; }
+body {
+  width: 100% !important;
+  overflow-y: scroll;
+  -webkit-text-size-adjust: none;
+  background-color: #e1e1e1;
+}
+.ReadMsgBody {
+  width: 100%;
+}
+.ExternalClass {
+  width: 100%;
+}
+.ExternalClass * {
+  line-height: 120% !important;
+}
+.appleLinksBlack a {
+  color: #000000 !important;
+  text-decoration: none;
+}
+@media (max-width: 600px) {
+.o_button {
+padding-top: 14px !important;
+}
+.image_resize  { width:220px !important;}
+.image_pad  { padding-top:15px !important;
+}
+.head_txt  { font-size:29px !important; line-height:35px !important;  padding-left:30px!important; padding-right:30px!important; padding-bottom: 28px !important; padding-top: 27px !important;}
+  .bod_txt  { font-size:23px !important; line-height:33px !important;  padding-left:10px!important; padding-right:10px!important; padding-bottom: 0px !important; padding-top: 20px !important;}
+.advice_pad  { padding-top:5px !important;}
+}
+</style>
+</head>
+<body class="body" bgcolor="#e1e1e1" padding="0" style="-webkit-text-size-adjust:none; width: 100% !important; margin:0;">
+<!--THIS IS THE THE WRAPPER TABLE-->
+<table width="100%" bgcolor="#e1e1e1" cellpadding="0" cellspacing="0" align="center" style="margin:0;" border="0">
+  <tr>
+    <td width="100%" bgcolor="#e1e1e1" valign="top" cellpadding="0" cellspacing="0" align="center" style="margin:0;" border="0"><!--THIS IS THE CONTAINING TABLE-->
+
+    <!--[if (gte mso 9)|(IE)]>
+<table width="620" style="max-width:620px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td>
+<![endif]-->
+
+      <table width="100%"class="switch" bgcolor="#e1e1e1" cellpadding="0" cellspacing="0" align="center" style="max-width:620px !important;" border="0">
+
+
+        <tr>
+          <td bgcolor="#e1e1e1" cellpadding="0" cellspacing="0" align="center" style="line-height:15px; margin:0; vertical-align:top; " border="0"><table class="switch" width="100%" bgcolor="#e1e1e1" cellpadding="0" cellspacing="0" align="center" style="margin:0; " border="0">
+
+
+                       <tr>
+                         <td width="51%" align="left" valign="middle" bgcolor="#222222" id="smaller2" style="  padding-top:12px; padding-bottom:12px; padding-left:20px; padding-right:10px;    " cellpadding="0" cellspacing="0" border="0"><a href="%%=RedirectTo(@company_jobs_flow_url)=%%">
+                           <table height="0" align="left" width="42" border="0" cellpadding="0" cellspacing="0">
+                             <tr>
+                               <td style="color:#FFFFFF; font-family: Arial, Helvetica, sans-serif; font-size:19px; line-height:23px; font-weight:bold; border:none;"><img src="http://email-assets.jobcase.com/jc_logo_new_r2.png" width="110" height="36" style="display:block;" border="0" alt=""/></td>
+                             </tr>
+                           </table>
+                           </a></td>
+                        <td align="right" bgcolor="#222222" border="0" cellpadding="0" cellspacing="0" id="smaller2" style=" font-size:22px; padding-top:9px; padding-bottom:9px; padding-left:10px; padding-right:25px; color:#FFFFFF; font-family: 'Roboto', Arial, Helvetica, sans-serif; max-width:240px !important;" valign="middle" width="49%"><a href="%%=RedirectTo('https://www.jobcase.com/r/profile')=%%" style="text-decoration: none;">
+                     <table border="0" cellpadding="0" cellspacing="0" width="100">
+                       <tr>
+                         <td><img src="%%=v(@profile_photo_url_1)=%%" width="31" height="31" style="border-radius:50%; display:block; border-style:solid; border-width:2px; border-color:#999999;" alt="" border="0" /></td>
+                         <td style="font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:12px; line-height:16px; font-weight:400; color:#FFFFFF; padding-left:8px; text-transform:capitalize; text-decoration: underline;">%%=v(@fname)=%%</td>
+                       </tr>
+                     </table>
+                     </a></td>
+              </tr>
+
+
+
+
+
+
+
+
+
+                     <tr>
+                  <td bgcolor="#1d91d2" background="" colspan="2" align="center"   style="margin:0; padding:20px; padding-top:20px; padding-bottom:35px; color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:24px;  font-weight:700; " cellpadding="0" cellspacing="0" border="0">
+                <table width="100%" border="0" cellpadding="0" cellspacing="0">
+
+
+             <tr>
+                        <td align="center"  style="padding:0px; padding-top:10px; padding-bottom:0px; border-bottom-left-radius:5px; border-bottom-right-radius:5px;">
+
+      <table bgcolor="#1d91d2" width="100%" align="center" border="0" cellpadding="0" cellspacing="0" style="max-width:540px; border-radius: 10px;">
+
+         <tr>
+                <td align="left" valign="middle" colspan="2" style="padding-top:5px; padding-left:15px; padding-bottom:10px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:20px; line-height:24px; font-weight:500; text-decoration:none;">You have new suggested jobs:</span></td>
+              </tr>
+        </table>
+
+
+
+    <table bgcolor="#FFFFFF" width="100%" align="center" border="0" cellpadding="0" cellspacing="0" style="max-width:540px; border-radius:10px; margin-bottom: 20px;">
+
+    <tr>
+
+             <td colspan="1" align="left" valign="middle"  style="padding-top:10px; padding-right:15px; padding-bottom:2px; color:#333333; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:13px; line-height:17px; font-weight:400; text-decoration:none;"><a href="%%=RedirectTo(@company_jobs_flow_url)=%%" style="color:#333333; text-decoration:none;"><img border="0" style="display:block;" src="http://email-assets.jobcase.com/jc/3216-badge-1.png"></a>
+    </td>
+
+             <td colspan="1" align="right" valign="top" style="padding-top:0px; padding-right:15px; padding-bottom:2px; color:#333333; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:13px; line-height:17px; font-weight:400; text-decoration:none;">
+
+    <table height="20" width="150" border="0" cellpadding="0" cellspacing="0" bgcolor="#1461AE" style="border-bottom-left-radius: 5px; border-bottom-right-radius: 5px;">
+            <tr>
+                <td align="center" style="font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:16px;  font-weight:700; color:#FFFFFF; text-decoration:none; text-transform:capitalize; padding: 5px 10px;"><a href="%%=RedirectTo(@company_jobs_flow_url)=%%" style="color:#FFFFFF; text-decoration:none;">%%=v(@date_format)=%%</a>
+    </td>
+            </tr>
+          </table>
+    </td>
+    </tr>
+     <tr>
+
+
+    <td align="left" colspan="2" valign="middle" style="padding-top:5px; padding-right:25px;  padding-left:25px; padding-bottom:10px; color:#4d4d4d; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:23px; font-weight:400; text-decoration:none;"><a href="%%=RedirectTo(@company_jobs_flow_url)=%%" style="color:#333333; text-decoration:none;">
+    %%=v(@greeting)=%%! I saw your interest in  <b>%%=v(@traffic_company)=%%</b> jobs near <b>%%=v(@displayed_location)=%%</b>. Here are some jobs you might like.
+    <br /><br />
+
+    Ashley W.
+    <br />Jobcase Community Specialist
+
+
+    </a>
+     </td>
+    </tr>
+
+
+
+    <tr>
+    <td align="right" colspan="2" valign="middle" style="padding-top:5px; padding-right:15px; padding-bottom:18px; color:#ff8300; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:17px; font-weight:700; text-decoration:none; text-transform:uppercase;"><a href="%%=RedirectTo(@company_jobs_flow_url)=%%" style="text-decoration:none;"><span style="color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:17px; font-weight:400; text-transform:uppercase; padding:8px 20px; border-radius:10px; background-color: #ff8300;">View Jobs &rsaquo;
+       </span></a>
+       </td>
+     </tr>
+
+
+    </table>
+
+
+
+
+
+              </td>
+              </tr>
+       </table>
+             </td>
+            </tr>
+
+      <!--Footer START-->
+      <!--commented out code that creates bug in gmail mobile -->
+               <!-- <tr>
+                 <td colspan="3" align="center"  bgcolor="" style="margin:0;" cellpadding="0" cellspacing="0" border="0"><table align="center" cellspacing="0" cellpadding="0" border="0" width="350px">
+          <tr>
+          <td height="1" style="line-height: 1px; font-size: 1px;">&nbsp;</td>
+         </tr>
+         </table></td>
+               </tr> -->
+
+              <tr>
+                <td colspan="2" align="center" bgcolor="" style="padding-top:22px; padding-left:0px; padding-right:0px; color:#333333; font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:14px; font-weight:normal;">%%=ContentArea("180")=%%</td>
+              </tr>
+      <!--Footer END-->
+
+            </table></td>
+        </tr>
+      </table>
+  <!--[if (gte mso 9)|(IE)]>
+        </td>
+    </tr>
+</table>
+<![endif]-->
+
+  </td>
+  </tr>
+</table>
+<!-- MonitorCampaignID: JC_WJS -->
+</body>
+<custom name="opencounter" type="tracking">
+</html>
+
+
+%%[ELSEIF @welcome_test_group == 'Test2woFred' THEN]%%
+%%[SET @preheader = concat(@fname,' you have new suggested jobs ',@date_format)]%%
+%%[SET @displayed_location = IIF((@location_parameter == ', '),'you', @displayed_location)]%%
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta content="initial-scale=1.0" name="viewport">
+<meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+<link href='http://fonts.googleapis.com/css?family=Roboto:300,400,500' rel='stylesheet' type='text/css'/>
+<link rel="stylesheet" href="path/to/font-awesome/css/font-awesome.min.css"/>
+<!--[if mso]>
+<style>
+* {
+ font-family: sans-serif !important;
+}
+</style>
+<![endif]-->
+
+
+<style type="text/css">
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+body {
+    width: 100% !important;
+    overflow-y: scroll;
+    -webkit-text-size-adjust: none;
+    background-color: #F4F4F4
+}
+.ReadMsgBody {
+    width: 100%;
+}
+.ExternalClass {
+    width: 100%;
+}
+.ExternalClass * {
+    line-height: 120% !important;
+}
+.appleLinksBlack a {
+    color: #ffffff !important;
+    text-decoration: none;
+}
+.applelink a, .applelink {
+    color: inherit;
+    text-decoration: none;
+}
+
+.text{
+width: 100%;
+display: -webkit-box;
+   	-webkit-line-clamp: 3;
+   	overflow: hidden;
+text-overflow: ellipsis;
+}
+
+@media (min-width: 480px) {
+
+.top_head {
+font-size: 25px !important;
+line-height: 33px !important;
+}
+
+</style>
+</head>
+<!--INLINE BODY STYLE-->
+<body bgcolor="#F4F4F4" style="-webkit-text-size-adjust:none; width: 100% !important; margin:0; overflow-y:scroll;  padding: 0;">
+<!--THIS IS THE 100% WRAPPER TABLE-->
+
+<!--THIS IS THE 100% WRAPPER TABLE-->
+<table align="center" bgcolor="#F4F4F4" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0;" width="100%">
+  <tr>
+    <td align="center" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="" valign="middle">
+
+ <!--[if (gte mso 9)|(IE)]>
+<table width="550" style="max-width:550px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td>
+<![endif]-->
+
+<table align="center" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0; max-width:550px !important;" width="100%">
+        <tr>
+          <td align="left" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" id="smaller2" style=" padding-top:10px; padding-bottom:10px; padding-left:25px; padding-right:10px;" valign="middle" width="50%"><a href="%%=RedirectTo('https://www.jobcase.com/r/profile')=%%">
+            <table align="left" border="0" cellpadding="0" cellspacing="0" height="0" width="42">
+              <tr>
+                <td style="color:#FFFFFF; font-family: 'Roboto', Arial, Helvetica, sans-serif; font-size:19px; line-height:23px; font-weight:bold; border:none;"><img alt="" border="0" height="31" src="http://email-assets.jobcase.com/jc3/jc_logo_new_r2.png" style="display:block;"></td>
+              </tr>
+            </table>
+            </a></td>
+          <td align="right" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" id="smaller2" style=" font-size:22px; padding-top:9px; padding-bottom:9px; padding-left:10px; padding-right:25px; color:#FFFFFF; font-family: 'Roboto', Arial, Helvetica, sans-serif; max-width:240px !important;" valign="middle" width="50%"><a href="%%=RedirectTo('https://www.jobcase.com/r/profile')=%%" style="text-decoration: none;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100">
+              <tr>
+                <td><img alt="" border="0" height="23" src="%%=v(@profile_photo_url_1)=%%" style="border-radius:50%; display:block; border-style: solid; border-color: #FFFFFF; border-width: 2px;" width="23"></td>
+                <td style="font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:13px; line-height:16px; font-weight:400; color:#FFFFFF; padding-left:8px; text-transform:capitalize; text-decoration: none;">My&nbsp;Profile</td>
+              </tr>
+            </table>
+            </a></td>
+        </tr>
+      </table></td>
+  </tr>
+</table>
+<table align="center" bgcolor="#F4F4F4" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0;" width="100%">
+
+
+  <tr>
+  <tr>
+    <td align="center" style="margin:0; padding-top: 15px; padding-left: 15px; padding-right: 15px;" valign="top" width="100%"><!--THIS IS THE 620px CONTAINER TABLE-->
+      <!--[if (gte mso 9)|(IE)]>
+<table width="550" style="max-width:550px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td>
+<![endif]-->
+      <table width="100%" align="center" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="box-shadow: 0px 0px 13px -3px rgba(0,0,0,0.13); max-width:550px !important; border-radius: 8px !important; ">
+
+
+
+    <tr>
+
+          <td align="center"  bgcolor="" style="margin:0; padding-left:15px; padding-right:15px; padding-top:20px; padding-bottom:15px;  color:#1A1A1A; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:15px; line-height:24px;  font-weight:500; " cellpadding="0" cellspacing="0" border="0"><a href="%%=RedirectTo(@company_jobs_flow_url)=%%" style="text-decoration: none;">  <table bgcolor="#FFFFFF" width="100%" align="center" border="0" cellpadding="0" cellspacing="0" style="max-width:500px;">
+
+
+
+
+<tr>
+<td width="100%" align="left" valign="middle" style="padding-top:5px; padding-right:10px; padding-left: 5px; color:#1a1a1a; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:16px; line-height: 22px; font-weight:400; text-decoration:none;  text-transform:capitalize; ">
+ %%=v(@greeting)=%%!</td> </tr>
+
+
+%%[IF @welcome_test_group == 'Test2woFred' AND @traffic_company == 'Remote' THEN]%%
+<tr>
+<td width="100%" align="left" valign="middle" style="padding-top:10px; padding-right:10px; padding-left: 5px; color:#1a1a1a; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:16px; line-height: 22px; font-weight:400; text-decoration:none;   "> I saw your interest in jobs hiring near you. With all the recent closures and layoffs due to COVID-19, I wanted to share some <span style="font-weight: 700;">Remote Job</span> opportunities that might be helpful - if you're interested. Just want to make sure I'm sending these to the right&nbsp;place. </td> </tr>
+
+
+<tr>
+
+%%[ELSE]%%
+  %%[IF @signature_test == 'Control' THEN]%%
+  <tr>
+  <td width="100%" align="left" valign="middle" style="padding-top:10px; padding-right:10px; padding-left: 5px; color:#1a1a1a; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:16px; line-height: 22px; font-weight:400; text-decoration:none;   "> I saw your interest in <span style="font-weight: 700;">%%=v(@traffic_company)=%%</span> jobs near <span style="font-weight: 700;">%%=v(@displayed_location)=%%</span>. I have a couple of jobs to share with you, but I want to make sure I'm sending these to the right&nbsp;place. </td> </tr>
+
+  %%[ELSE]%%
+  <tr>
+  <td width="100%" align="left" valign="middle" style="padding-top:10px; padding-right:10px; padding-left: 5px; color:#1a1a1a; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:16px; line-height: 22px; font-weight:400; text-decoration:none;   "> I'm Ashley, a community specialist from Jobcase. I just saw your interest in <span style="font-weight: 700;">%%=v(@traffic_company)=%%</span> jobs near <span style="font-weight: 700;">%%=v(@displayed_location)=%%</span>. Here I found some relavant opportunies and thought you might be interested. </td> </tr>
+
+  %%[ENDIF]%%
+  <tr>
+%%[ENDIF]%%
+
+<td>
+
+<table border="0" cellpadding="0" cellspacing="0" style="padding-top:20px;" width="100%">
+
+<tr>
+%%[IF @signature_test == 'Control' THEN]%%
+<td style=" padding-left:0px; padding-right:10px; padding-top:20px; padding-bottom:px; color:#565656; font-family: 'Roboto', Arial, Helvetica, sans-serif; font-size:11px; line-height:15px; font-weight:400; text-decoration:none; text-transform:capitalize;" width="50"><img alt="" border="0" height="40" src="http://email-assets.jobcase.com/jc3/ashley-w.png" style=" border-radius:50%;display: block;" width="40">
+</td>
+
+<td bgcolor="" style=" padding-top:18px; padding-right:10px;color:#1a1a1a; font-family: 'Roboto', Arial, Helvetica, sans-serif; font-size:16px; line-height:20px; font-weight:700; font-weight: bold; text-decoration:none;" width="100%">Ashley W. <br/>
+<span style=" font-size: 16px; font-weight: 400">Jobcase Community Specialist</span>
+</td>
+%%[ENDIF]%%
+</tr>
+</table>
+</td>
+</tr>
+
+
+ </table>
+</a>
+
+
+<tr>
+          <td  align="center"   style="margin:0;  color:#FFFFFF; padding-top:10px; padding-bottom:35px; font-family:Arial, Helvetica, sans-serif; font-size:25px; line-height:22px;  font-weight:300; " cellpadding="0" cellspacing="0" border="0"><table width="250" height="46" bgcolor="#007bc7" cellpadding="0" cellspacing="0" align="center" style="margin:0; border-radius:70%; " border="0" valign="top">
+              <tr>
+                <td width="250" height="46" bgcolor="#007bc7" cellpadding="0"cellspacing="0" align="center" valign="middle" style="margin:0; font-size:18px; color:#ffffff; font-family:Arial, Helvetica, sans-serif; line-height:16px; border-radius:50px; font-weight:400; background-repeat:repeat-x; " border="0"><span style="font-size:15px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><a href="%%=RedirectTo(@company_jobs_flow_url)=%%" style="text-decoration:none;" style="color:#ffffff; text-decoration:none; width:250px;  padding-top:18px; padding-bottom:16px; vertical-align:middle; display:block;  font-size:16px;  border-radius:6px;" target="_blank"><span style="color:#FFFFFF;">Confirm email and go to jobs </span></a></span></td>
+              </tr>
+            </table></td>
+        </tr>
+
+
+
+
+
+
+            </table>
+        </tr>
+
+  </td>
+
+
+  <tr>
+    <td align="center" style="margin:0; padding-top: 0px; padding-left: 10px; padding-right: 10px;" valign="top" width="100%">
+
+ <!--[if (gte mso 9)|(IE)]>
+<table width="400" style="max-width:400px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td>
+<![endif]--><table width="100%" align="center" bgcolor="" border="0" cellpadding="0" cellspacing="0" style="max-width:550px !important;">
+        <tr>
+          <td align="center" bgcolor="" colspan="2" style="padding-top:30px; padding-bottom: 30px; padding-left:0px; padding-right:0px; color:#4D4D4D; font-family: 'Roboto', Arial, Helvetica, sans-serif; font-size:11px; line-height:14px; font-weight:normal;">%%=ContentArea("180")=%%</td>
+        </tr>
+      </table></td>
+  </tr>
+</table>
+
+<!-- MonitorCampaignID: JC_WJS_C -->
+
+</body>
+<custom name="opencounter" type="tracking">
+</html>
+
+%%[ELSE]%%
+%%[SET @preheader = 'Get started with Jobcase']%%
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta content="initial-scale=1.0" name="viewport">
+<meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+<link href='http://fonts.googleapis.com/css?family=Roboto:300,400,500' rel='stylesheet' type='text/css'/>
+<link rel="stylesheet" href="path/to/font-awesome/css/font-awesome.min.css"/>
+<!--[if mso]>
+  <style>
+    * {
+      font-family: sans-serif !important;
+    }
+  </style>
+  <![endif]-->
+
+<style type="text/css">
+table {
+border-collapse: collapse;
+border-spacing: 0;
+}
+body {
+width: 100% !important;
+overflow-y: scroll;
+-webkit-text-size-adjust: none;
+background-color: #F4F4F4
+}
+.ReadMsgBody {
+width: 100%;
+}
+.ExternalClass {
+width: 100%;
+}
+.ExternalClass * {
+line-height: 120% !important;
+}
+.appleLinksBlack a {
+color: #ffffff !important;
+text-decoration: none;
+}
+.applelink a, .applelink {
+color: inherit;
+text-decoration: none;
+}
+.text {
+width: 100%;
+display: -webkit-box;
+-webkit-line-clamp: 3;
+overflow: hidden;
+text-overflow: ellipsis;
+}
+</style>
+</head>
+<!--INLINE BODY STYLE-->
+<body bgcolor="#F4F4F4" style="-webkit-text-size-adjust:none; width: 100% !important; margin:0; overflow-y:scroll;  padding: 0;">
+<!--THIS IS THE 100% WRAPPER TABLE-->
+
+<!--THIS IS THE 100% WRAPPER TABLE-->
+<table align="center" bgcolor="#F4F4F4" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0;" width="100%">
+  <tr>
+    <td align="center" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" id="smaller2" style="" valign="middle"><!--[if (gte mso 9)|(IE)]>
+<table width="550" style="max-width:550px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+<tr>
+    <td>
+<![endif]-->
+
+      <table align="center" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0; max-width:550px !important;" width="100%">
+        <tr>
+          <td align="left" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" id="smaller2" style=" padding-top:10px; padding-bottom:10px; padding-left:25px; padding-right:10px;" valign="middle" width="50%"><a href="%%=RedirectTo('https://www.jobcase.com/r/profile')=%%">
+            <table align="left" border="0" cellpadding="0" cellspacing="0" height="0" width="42">
+            <tr>
+                <td style="color:#FFFFFF; font-family: 'Roboto', Arial, Helvetica, sans-serif; font-size:19px; line-height:23px; font-weight:bold; border:none;"><img alt="" border="0" height="31" src="http://email-assets.jobcase.com/jc3/jc_logo_new_r2.png" style="display:block;"></td>
+              </tr>
+          </table>
+            </a></td>
+          <td align="right" bgcolor="#223d5d" border="0" cellpadding="0" cellspacing="0" id="smaller2" style=" font-size:22px; padding-top:9px; padding-bottom:9px; padding-left:10px; padding-right:25px; color:#FFFFFF; font-family: 'Roboto', Arial, Helvetica, sans-serif; max-width:240px !important;" valign="middle" width="50%"><a href="%%=RedirectTo('https://www.jobcase.com/r/profile')=%%" style="text-decoration: none;">
+            <table border="0" cellpadding="0" cellspacing="0" width="23">
+            <tr>
+                <td><img alt="" border="0" height="23" src="%%=v(@profile_photo_url_1)=%%" style="border-radius:50%; display:block; border-style: solid; border-color: #FFFFFF; border-width: 2px;" width="23"></td>
+
+              </tr>
+          </table>
+            </a></td>
+        </tr>
+      </table></td>
+  </tr>
+</table>
+<table align="center" bgcolor="#F4F4F4" border="0" cellpadding="0" cellspacing="0" style="border-spacing: 0; margin:0;" width="100%">
+
+  <!----Section block 1----->
+  <tr>
+    <td align="center" style="margin:0; padding-top: 18px; padding-left: 15px; padding-right: 15px;" valign="top" width="100%"><!--THIS IS THE 550px CONTAINER TABLE-->
+      <!--[if (gte mso 9)|(IE)]>
+<table width="550" style="max-width:550px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+<tr>
+    <td>
+<![endif]-->
+
+      <table width="100%" align="center" bgcolor="#FFFFFF" border="0" cellpadding="0" cellspacing="0" style="box-shadow: 0px 0px 13px -3px rgba(0,0,0,0.13); max-width:550px !important; border-radius: 8px !important; ">
+
+        <!-------Header------>
+
+        <tr>
+          <td  width="100%" align="center" valign="middle" style="padding-top:25px; padding-right:15px; padding-left: 15px; padding-bottom: 15px; color:#1a1a1a; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:26px; line-height: 27px; font-weight:500; text-decoration:none;   "> Welcome to Jobcase!</td>
+        </tr>
+        <tr>
+          <td width="100%" align="center" valign="middle" style="padding-top:0px; padding-right:22px; padding-left: 22px; padding-bottom: 10px; color:#1a1a1a; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:15px; line-height: 23px; font-weight:400; text-decoration:none;   ">A message from our CEO</td>
+        </tr>
+     <tr>
+                  <td valign="top"  colspan="2" align="center"  bgcolor="#FFFFFF" style="margin:0; padding-left:25px; padding-right:25px; padding-top:5px; padding-bottom:15px; color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:14px; line-height:22px;  font-weight:400; " cellpadding="0" cellspacing="0" border="0"><a href="%%=RedirectTo(@casemail_url)=%%" style="color:#444444; text-decoration:none;">Thank you for joining Jobcase! We are all so happy you chose us to make your work-life, work for you! You should have another...  <span style="color:#007bc7; font-weight: 700; text-decoration: underline;">Read More</span></a></td>
+                </tr>
+
+                        <tr>
+            <td width="100%" align="left" valign="middle" bgcolor="#FFFFFF" style="padding-bottom: 10px;" cellpadding="0" cellspacing="0" border="0"><a href="%%=RedirectTo(@casemail_url)=%%">
+              <table height="0" align="center" width="178" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="color:#FFFFFF; font-family: Arial, Helvetica, sans-serif; font-size:19px; line-height:23px; font-weight:bold; border:none;"><img src="http://email-assets.jobcase.com/fred19.jpg" width="178" height="110" style="display:block;" border="0" alt=""/></td>
+                </tr>
+              </table>
+              </a></td>
+
+          </tr>
+
+
+        <!-------button block------>
+
+        <tr>
+          <td  align="center"   style="margin:0;  color:#FFFFFF; padding-top:0px; padding-bottom:30px; font-family:Arial, Helvetica, sans-serif; font-size:25px; line-height:22px;  font-weight:300; " cellpadding="0" cellspacing="0" border="0"><table width="250" height="46" bgcolor="#007bc7" cellpadding="0" cellspacing="0" align="center" style="margin:0; border-radius:70%; " border="0" valign="top">
+              <tr>
+              <td width="270" height="44" bgcolor="#007bc7" cellpadding="0"cellspacing="0" align="center" valign="middle" style="margin:0; font-size:18px; color:#ffffff; font-family:Roboto, Arial, Helvetica, sans-serif; line-height:16px; border-radius:50px; font-weight:400; background-repeat:repeat-x; " border="0"><span style="font-size:15px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><a href="%%=RedirectTo(@casemail_url)=%%" style="color:#ffffff; text-decoration:none; width:270px;  padding-top:18px; padding-bottom:16px; vertical-align:middle; display:block;  font-size:16px;  border-radius:6px;" target="_blank"><span style="color:#FFFFFF;">View all messages</span></a></span></td>
+            </tr>
+            </table></td>
+        </tr>
+      </table></td>
+  </tr>
+
+  <tr>
+    <td align="center" bgcolor="#F4F4F4" colspan="2" style="padding-top:30px; padding-bottom: 30px; padding-left:0px; padding-right:0px; color:#4D4D4D; font-family: 'Roboto', Arial, Helvetica, sans-serif; font-size:11px; line-height:14px; font-weight:normal;">%%=ContentArea("180")=%%</td>
+  </tr>
+</table>
+</tr>
+</td>
+</table>
+</body>
+<custom name="opencounter" type="tracking">
+</html>
+%%[ENDIF]%%

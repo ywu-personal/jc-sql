@@ -1,0 +1,28 @@
+
+select
+sent_date
+, keyword
+, num
+, kw_rank
+from
+(
+select
+convert_timezone('America/New_York', u.membership_arrival_created_at)::Date AS sent_date
+, replace(replace(replace(replace(lower(regexp_replace(u.membership_arrival_computed_keyword,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') keyword
+, count(keyword) as num
+, row_number() over (partition by sent_date order by num desc) as kw_rank
+from users u
+where u.user_key in
+ (
+   select distinct user_key from communications c
+--    where  c.outbound_communication_template_name = 'welcome_email'
+   where c.communication_vendor_template_name = 'JC_TR_ALL_Welcome_Reg' OR c.outbound_communication_template_name = 'welcome_email'
+   and convert_timezone('America/New_York', c.communication_sent_time)::Date >= '2020-05-15'
+ )
+and convert_timezone('America/New_York', u.membership_arrival_created_at)::Date >= '2020-05-15'
+group by 1,2
+)
+where kw_rank <=15
+and keyword is not null
+order by sent_date desc, kw_rank asc
+;

@@ -1,0 +1,98 @@
+-- tracking OCS Welcome open rate issue (rollout to 50/50 since 4/28)
+
+select
+convert_timezone('America/New_York', c.communication_sent_time)::Date AS sent_date
+, case when substring(md5(concat('xy20',md5(c.user_key))),4,1)<='7' then 'Control'
+       when substring(md5(concat('xy20',md5(c.user_key))),4,1)>'7' and substring(md5(concat('xy20',md5(c.user_key))),4,1)<='b' then 'Test1'
+       else 'Test2ExpKW' end as Test_group
+-- , case when substring(md5(concat('xy20',md5(c.user_key))),4,1)<'8' then 'Control'
+--        else 'Test2ExpKW' end as Test_group
+, case  when Test_group = 'Control' and c.communication_serialized_parameters not ilike '%"job_company_name":null%' and COALESCE(u.user_computed_city, u.user_computed_state,u.user_entered_zip_code) IS NOT NULL then 'Control-Jobsearch'
+        when Test_group = 'Control' and (c.communication_serialized_parameters ilike '%"job_company_name":null%' or COALESCE(u.user_computed_city, u.user_computed_state,u.user_entered_zip_code) IS NULL) then 'Control-Fred'
+        when Test_group = 'Test1' and c.communication_serialized_parameters not ilike '%"job_company_name":null%' and COALESCE(u.user_computed_city, u.user_computed_state,u.user_entered_zip_code) IS NOT NULL then 'Test1-Confirm'
+        when Test_group = 'Test1' and (c.communication_serialized_parameters ilike '%"job_company_name":null%' OR COALESCE(u.user_computed_city, u.user_computed_state,u.user_entered_zip_code) IS NULL) then 'Test1-Fred'
+        when Test_group = 'Test2ExpKW' and c.communication_serialized_parameters not ilike '%"job_company_name":null%' and COALESCE(u.user_computed_city, u.user_computed_state,u.user_entered_zip_code) IS NOT NULL then 'Test2-Confirm'
+        when Test_group = 'Test2ExpKW' and c.communication_serialized_parameters ilike '%"job_company_name":null%' and c.communication_serialized_parameters ilike '%"registration_arrival_keyword":null%' and COALESCE(u.user_computed_city, u.user_computed_state,u.user_entered_zip_code) IS NOT NULL then 'Test2-Remote'
+        when Test_group = 'Test2ExpKW' and c.communication_serialized_parameters ilike '%"job_company_name":null%' and c.communication_serialized_parameters not ilike '%"registration_arrival_keyword":null%' and COALESCE(u.user_computed_city, u.user_computed_state,u.user_entered_zip_code) IS NOT NULL then 'Test2-ExpKW'
+        when Test_group = 'Test2ExpKW' and COALESCE(u.user_computed_city, u.user_computed_state,u.user_entered_zip_code) IS NULL then 'Test2-Jobsearch'
+        else 'Other' end as subgroup
+, case when communication_to_address_email_domain_group in ('GMAIL', 'YAHOO', 'AOL', 'MSN') then communication_to_address_email_domain_group else 'OTHER' END AS DOMAIN_GROUP
+, count(distinct c.communication_id) AS emails_attempted
+, count(distinct case when c.communication_failure_time IS NULL THEN c.communication_id END) AS emails_sent
+, count(distinct case when c.communication_failure_time IS NOT NULL THEN c.communication_id END) AS emails_failure
+, count (distinct c.user_key) as recipients
+, count(distinct case when c.communication_failure_time IS NULL AND COALESCE(c.communication_open_time_initial,c.communication_click_time_initial) IS NOT NULL THEN c.communication_id END) AS emails_opened
+, count(distinct case when c.communication_failure_time IS NULL AND c.communication_click_time_initial IS NOT NULL THEN c.communication_id END) emails_clicked
+, count(distinct case when c.communication_failure_time is null and (osd.email_address is not null or c.communication_unsubscribe_time_initial is not null) then c.communication_id end) emails_offer_specific_unsubscribed
+, COUNT(DISTINCT case when a.arrival_url NOT ilike '%onboarding-flow%' then (a.user_key + to_char(a.arrival_created_at, 'YYYYMMDDHH24') + md5(replace(replace(replace(lower(a.arrival_url),'.com/r/','.com/'),'.com/r?','.com/?'),'https://','http://'))) end) arrivals
+, count(distinct ca.user_key) as arrived_users
+, sum(jcr.job_clicks)::float as jobclicks
+, sum(jcr.job_clicks)::float / (arrivals +.00001) as cpa
+, sum(coalesce(jcr.job_revenue, 0))::float / (arrivals +.00001) as vpa
+, sum(coalesce(jcr.job_revenue, 0)) as revenue
+-- , count(distinct case when er.reportable_event_name ilike 'LoggedInPageViewEvent' then ca.arrival_key end) as arrivals_logged_in
+-- , count(distinct case when er.reportable_event_name ilike 'LoggedInPageViewEvent' then ca.user_key end) as user_logged_in
+-- , count (distinct case when prf.profile_initial_authentication_arrival_created_at is not null then prf.profile_key end) as has_auth
+, count (distinct case when prf.profile_initial_authentication_arrival_created_at is not null and
+  ca.arrival_key is not null and
+  prf.profile_initial_authentication_arrival_created_at = ca.arrival_created_at then ca.user_key end) as first_auth
+-- , count (distinct case when prf.profile_initial_authentication_arrival_created_at is not null and
+--   er.reportable_event_name ilike 'LoggedInPageViewEvent' and
+--   prf.profile_initial_authentication_arrival_created_at = ca.arrival_created_at then ca.user_key end) as first_auth_loggedin
+-- , count (distinct case when prf.profile_initial_authentication_arrival_created_at is not null and
+--   ca.user_key is not null and
+--   prf.profile_initial_authentication_arrival_created_at < ca.communication_sent_time  then ca.user_key end) as old_auth
+-- , count (distinct case when prf.profile_initial_authentication_arrival_created_at is not null and
+--   prf.profile_initial_authentication_arrival_created_at < c.communication_sent_time then c.user_key end) as old_auth_recepients
+-- , count (distinct case when prf.profile_initial_authentication_arrival_created_at is not null and
+--   er.reportable_event_name ilike 'LoggedInPageViewEvent' and
+--   prf.profile_initial_authentication_arrival_created_at < ca.communication_sent_time then ca.user_key end) as old_auth_loggedin
+from communications c
+left join dbm.communication_to_arrival ca
+  on ca.user_key = c.user_key
+  and ca.communication_channel = 'EMAIL'
+  and ca.communication_id = c.communication_id
+  and ca.communication_sent_time >= convert_timezone('America/New_York', 'UTC', '2020-03-22 16:00')
+left join
+(
+    select distinct sendid || '_' || batchid as email_batch_id
+    , emailaddress as email_address
+    from dbm.jobcase_preferences
+    where  option_id  in ('3','4')
+) osd on c.communication_to_address = osd.email_address and c.bulk_send_id = osd.email_batch_id
+left join
+(
+   select distinct arrival_key
+   , reportable_event_name
+   from event_reportables
+   where reportable_event_name ilike 'LoggedInPageViewEvent'
+) er
+on er.arrival_key = ca.arrival_key
+-- all auths from profile table
+left join users u on c.user_key = u.user_key
+left join profiles prf on prf.profile_key = u.profile_key
+
+left join arrivals a on a.user_key = ca.user_key and a.arrival_key = ca.arrival_key
+--
+left join
+(
+SELECT user_key, arrival_key
+                 , SUM(job_search_clickout_revenue) job_revenue
+                 , count(distinct case when job_search_clickout_disposition = 'SUCCESS' AND job_search_clickout_status = 'POSTED' THEN job_search_clickout_key END) job_clicks
+          FROM job_search_clickouts
+            NATURAL JOIN arrivals
+          WHERE arrival_computed_bot_classification IS NULL
+          AND   arrival_application = 'jobcase.com'
+          and job_search_clickout_disposition = 'SUCCESS'
+                                        and job_search_clickout_status = 'POSTED'
+          AND  arrival_created_at >= convert_timezone('America/New_York', 'UTC', '2020-03-22 16:00')
+          GROUP BY 1,2
+) jcr
+on jcr.user_key = ca.user_key and jcr.arrival_key = ca.arrival_key
+where
+c.communication_sending_domain IN ('jobcase.com','post.jobcase.com','t.jobcase.com', 'umail.jobcase.com', 'tumail.jobcase.com')
+and c.communication_sent_time >= convert_timezone('America/New_York', 'UTC', '2020-03-22 16:00')
+and outbound_communication_template_name = 'welcome_email'
+group by 1,2,3,4
+order by 1,2,3,4
+;
