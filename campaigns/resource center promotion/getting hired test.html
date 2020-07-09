@@ -1,0 +1,223 @@
+%%[
+  SET @sender = [data001]
+	SET @user_key = [user_key]
+
+	SET @state_array = LookupRows("ENT.JD_Administrator_Names","State_Abbrev",[user_computed_state])
+	SET @url_state = lowercase(IIF(rowcount(@state_array)== 0, "", Field(Row(@state_array,1),"State_Name")))
+	SET @display_state = IIF(rowcount(@state_array)== 0, "", Field(Row(@state_array,1),"State_Name"))
+
+  /* Washington dc*/
+  IF [user_computed_state] == 'DC' THEN
+	 SET @url_state = 'washington-dc'
+	 SET @display_state = 'Washington D.C.'
+	ENDIF
+
+  SET @footer_text_color = "#FFFFFF"
+
+
+  /* Pull profile photo url for header */
+  SET @profile_photo_array_1 = LookupRows("ENT.PM_Master_Subscriber_Data", "user_entered_email", lowercase([EmailAddr]))
+  SET @profile_photo_value_1 = IIF(rowcount(@profile_photo_array_1)== 0, "", Field(Row(@profile_photo_array_1,1),"profile_user_entered_photo"))
+  SET @profile_photo_url_1 = IIF(NOT EMPTY(@profile_photo_value_1), TRIM(@profile_photo_value_1), 'http://email-assets.jobcase.com/empty_pic.jpg')
+
+
+  /* Start Paste Here */
+  SET @subscriber_fname = IIF(rowcount(@profile_photo_array_1)== 0, "", Field(Row(@profile_photo_array_1,1),"user_entered_first_name"))
+  SET @fname =   IIF(NOT EMPTY(@subscriber_fname), ProperCase(@subscriber_fname), '')
+
+  SET @sender_fname = substring(@sender,1,Subtract(IndexOf(@sender,' '),1))
+  SET @sender_with_last_initial = concat(substring(@sender,1,add(IndexOf(@sender,' '),1)),'.')
+
+
+  /* Start Paste Here */
+  SET @subject_line = IIF(NOT EMPTY(@fname)
+	    , concat(@fname, ", ", "you have (1) new message on Jobcase")
+    	, concat("You have (1) new message on Jobcase"))
+
+
+
+  SET @preheader = 'Check out the Getting Hired Resource Center at Jobcase'
+
+  SET @greeting = IIF(NOT EMPTY(@fname),concat("Hi ", @fname,","),"Hi there,")
+
+  SET @header_text = "You have (1) new&nbsp;message!"
+
+  SET @message_image_url =  "http://email-assets.jobcase.com/message.png"
+
+  SET @my_profile_url = concat('https://www.jobcase.com/r/profile')
+
+ Set @resource_url = 'https://www.jobcase.com/ru/job-readiness-getting-hired-resource-center'
+
+ set @today = FormatDate(now(),"MMM DD, YYYY")
+
+
+
+IF @sender_fname == 'Lenin' THEN
+  SET @profile_photo_array_follower = LookupRows("ENT.PM_Master_Subscriber_Data", "user_entered_email", lowercase('lpina24@gmail.com'))
+  SET @profile_photo_value_follower = IIF(rowcount(@profile_photo_array_follower)== 0, "", Field(Row(@profile_photo_array_follower,1),"profile_user_entered_photo"))
+  SET @follower_photo_url_1 = IIF(NOT EMPTY(@profile_photo_value_follower), TRIM(@profile_photo_value_follower), 'http://email-assets.jobcase.com/empty_pic.jpg')
+ELSEIF @sender_fname == 'Laila' THEN
+  SET @profile_photo_array_follower = LookupRows("ENT.PM_Master_Subscriber_Data", "user_entered_email", lowercase('lnashat@gmail.com'))
+  SET @profile_photo_value_follower = IIF(rowcount(@profile_photo_array_follower)== 0, "", Field(Row(@profile_photo_array_follower,1),"profile_user_entered_photo"))
+  SET @follower_photo_url_1 = IIF(NOT EMPTY(@profile_photo_value_follower), TRIM(@profile_photo_value_follower), 'http://email-assets.jobcase.com/empty_pic.jpg')
+ELSEIF @sender_fname == 'Ashley' THEN
+  SET @follower_photo_url_1 = 'http://email-assets.jobcase.com/jc/ashley-w.png'
+ELSEIF @sender_fname == 'Scott' THEN
+  SET @profile_photo_array_follower = LookupRows("ENT.PM_Master_Subscriber_Data", "user_entered_email", lowercase('scottrdobbie@gmail.com'))
+  SET @profile_photo_value_follower = IIF(rowcount(@profile_photo_array_follower)== 0, "", Field(Row(@profile_photo_array_follower,1),"profile_user_entered_photo"))
+  SET @follower_photo_url_1 = IIF(NOT EMPTY(@profile_photo_value_follower), TRIM(@profile_photo_value_follower), 'http://email-assets.jobcase.com/empty_pic.jpg')
+ELSEIF @sender_fname == 'Esther' THEN
+  SET @profile_photo_array_follower = LookupRows("ENT.PM_Master_Subscriber_Data", "user_entered_email", lowercase('epascal13@gmail.com'))
+  SET @profile_photo_value_follower = IIF(rowcount(@profile_photo_array_follower)== 0, "", Field(Row(@profile_photo_array_follower,1),"profile_user_entered_photo"))
+  SET @follower_photo_url_1 = IIF(NOT EMPTY(@profile_photo_value_follower), TRIM(@profile_photo_value_follower), 'http://email-assets.jobcase.com/empty_pic.jpg')
+ELSEIF @sender_fname == 'Jeff' THEN
+  SET @profile_photo_array_follower = LookupRows("ENT.PM_Master_Subscriber_Data", "user_key", lowercase('79M2QYT3aBHG17H-RTPJR_AY'))
+  SET @profile_photo_value_follower = IIF(rowcount(@profile_photo_array_follower)== 0, "", Field(Row(@profile_photo_array_follower,1),"profile_user_entered_photo"))
+  SET @follower_photo_url_1 = IIF(NOT EMPTY(@profile_photo_value_follower), TRIM(@profile_photo_value_follower), 'http://email-assets.jobcase.com/empty_pic.jpg')
+ELSE SET @follower_photo_url_1 = 'http://email-assets.jobcase.com/empty_pic.jpg'
+ENDIF
+
+
+]%%
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta name="viewport" content="initial-scale=1.0">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<style type="text/css">
+body {
+width: 100% !important;
+overflow-y: scroll;
+-webkit-text-size-adjust: none;
+background-color: #295175;
+}
+.ReadMsgBody {
+width: 100%;
+}
+.ExternalClass {
+width: 100%;
+}
+.ExternalClass * {
+line-height: 120% !important;
+}
+.appleLinksBlack a {
+color: #000000 !important;
+text-decoration: none;
+}
+@media (min-width: 600px) {
+.switch {
+}
+.image1 img {
+width: 100%;
+}
+}
+</style>
+<link href='http://fonts.googleapis.com/css?family=Roboto:300,400,500,600,700' rel='stylesheet' type='text/css'/>
+</head>
+<body bgcolor="#295175" style="-webkit-text-size-adjust:none; width: 100% !important; margin:0; overflow-y:scroll; padding: 0;">
+<!--THIS IS THE 100% WRAPPER TABLE-->
+<table align="center" bgcolor="#295175" border="0" cellpadding="0" cellspacing="0" style="margin:0;" width="100%">
+ <tr>
+   <td align="center" style="margin:0; padding-top: 0px; padding-left: 9px; padding-right: 9px;" valign="top" width="100%"><!--THIS IS THE 620px CONTAINER TABLE-->
+
+     <table width="100%" align="center" border="0" cellpadding="0" cellspacing="0" style="max-width:480px !important;">
+       <tr>
+         <td align="center" style="margin:0; vertical-align:top; max-width:480px !important;"><!--THESE ARE THE CONTENT TABLES -THE TABLES ABOVE ARE THE CONTAINING AND WRAPPER TABLES-->
+           <!--[if (gte mso 9)|(IE)]>
+<table width="480" style="max-width:480px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+   <tr>
+       <td>
+<![endif]-->
+
+       <tr>
+         <td  bgcolor="#295175" colspan="2" align="center"  style="margin:0; padding:40px; padding-top:7px; padding-bottom:5px; color:#222222; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:18px; line-height:24px;  font-weight:700; " cellpadding="0" cellspacing="0" border="0"><table width="100%" align="center" style="max-width:460px; " cellpadding="0" cellspacing="0" border="0">
+             <tr>
+               <td align="left" class="fullwidthnon align-copy body" style="text-align: center; font-family: 'Roboto', Helvetica, Arial, sans-serif; color:#FFFFFF; font-weight:400; font-size:15px; line-height:24px; letter-spacing:0px; margin:0; vertical-align:bottom; padding-left:15px; padding-right:15px; padding-top:6px; padding-bottom:11px; "><a href="%%=RedirectTo('https://www.jobcase.com/profile')=%%">
+                 <table height="0" align="center" width="125" border="0" cellpadding="0" cellspacing="0">
+                   <tr>
+                     <td style="color:#FFFFFF; font-family: Arial, Helvetica, sans-serif; font-size:19px; line-height:23px; font-weight:bold; border:none;"><img src="http://email-assets.jobcase.com/jc_logo_new_r2.png" width="125" height="41" style="display:block;" border="0" alt=""/></td>
+                   </tr>
+                 </table>
+                 </a></td>
+             </tr>
+           </table></td>
+       </tr>
+       <tr>
+         <td colspan="2" align="left"  style="margin:0; padding-left:0px; padding-right: 0px;   padding-top:27px; padding-bottom:0px; font-size:14px; line-height:17px; color:#000000; font-family:'Roboto', Arial, Helvetica, sans-serif; " cellpadding="0" cellspacing="0" border="0"><a href="%%=RedirectTo(@resource_url)=%%" style="text-decoration: none;">
+           <table width="100%" align="left" border="0" cellpadding="0" cellspacing="0">
+             <tr>
+               <td width="95%" align="left" valign="top"  style="padding-right:0px; padding-left:8px; padding-top:0px; padding-bottom:0px; color:#1d91d2; font-family:Arial, Helvetica, sans-serif; font-size:15px; line-height:19px; font-weight:bold; text-transform:capitalize;"><table width="0" align="left" border="0" cellpadding="0" cellspacing="0">
+                   <tr>
+                     <td width="65" rowspan="2" align="left" valign="top"  style="padding-right:0px; padding-left:0px; padding-top:0px; padding-bottom:0px; color:#1d91d2; font-family:Arial, Helvetica, sans-serif; font-size:15px; line-height:19px; font-weight:bold; text-transform:capitalize;"><table width="0" align="left" border="0" cellpadding="0" cellspacing="0">
+                         <tr>
+                           <td><img src="%%=v(@follower_photo_url_1)=%%" width="52" height="52" style="border-radius:50%; display:block; border-style:solid; border-width:2px; border-color:#FFFFFF;" alt="" border="0" /></td>
+                         </tr>
+                       </table></td>
+                     <td width="100%" align="left" valign="middle"  style="padding-right:9px; padding-bottom:2px; padding-left:12px; padding-top:4px; color:#FFFFFF; font-family:'Roboto', Arial, Helvetica, sans-serif; font-size:19px; line-height:21px; font-weight:600; ">%%=v(@sender)=%%</td>
+                   </tr>
+                 </table></td>
+               <td  width="5%" align="right" valign="top" style="padding-right:6px; padding-left:0px; padding-top:5px; color:#1d91d2; font-family:Arial, Helvetica, sans-serif; font-size:15px; line-height:19px; text-transform:capitalize;"><table width="55" border="0" cellspacing="0" cellpadding="0">
+                   <tr>
+                     <td><img src="http://email-assets.jobcase.com/job_mail.jpg" width="55" height="41" style="display:block;" border="0" alt=""/></td>
+                   </tr>
+                 </table></td>
+             </tr>
+             <tr>
+               <td colspan="2" align="left" valign="top" bgcolor="#FFFFFF" style="padding-right:0px; padding-left:0px; padding-top:0px; padding-bottom:0px; color:#1d91d2; font-family:Arial, Helvetica, sans-serif; font-size:15px; line-height:19px; font-weight:bold;"><table width="100%" border="0" cellspacing="0" cellpadding="0">
+                 </table></td>
+             </tr>
+           </table>
+           </a></td>
+       </tr>
+       <tr>
+         <td colspan="2" align="left" valign="top" style="padding-right:0px; padding-left:0px; padding-top:0px; padding-bottom:0px; color:#1d91d2; font-family:Arial, Helvetica, sans-serif; font-size:15px; line-height:19px; font-weight:bold;"><a href="%%=RedirectTo(@resource_url)=%%" style="text-decoration: none;">
+           <table width="100%" border="0" cellspacing="0" cellpadding="0">
+             <tr>
+               <td align="right" style="padding-right: 23px; padding-top: 0px;"><table width="0" border="0" cellspacing="0" cellpadding="0">
+                   <tr>
+                     <td bgcolor=""><img src="http://email-assets.jobcase.com/jc/4576-carrot.png" width="32" height="25" style="display:block;" alt="" border="0" /></td>
+                   </tr>
+                 </table></td>
+             </tr>
+             <tr>
+               <td bgcolor="#ffffff" style="padding-left:20px; padding-right:20px; padding-top: 28px; padding-bottom: 10px; font-family:Arial, Helvetica, sans-serif; font-size:17px; line-height:24px; color:#1a1a1a; font-weight: 600; border-top-right-radius: 7px; border-top-left-radius: 7px; text-transform: capitalize;">%%=v(@greeting)=%%</td>
+             </tr>
+             <tr>
+               <td bgcolor="#ffffff" style="padding-left:20px; padding-right:20px; padding-top: 0px; padding-bottom: 10px; font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:23px; color:#1a1a1a; font-weight: 300;"> Ready to get back into the workforce? I wanted to let you know that Jobcase just launched a <strong>Getting Hired Recourse Center</strong> to help you navigate the process. It includes useful tips and advice about applications, interviews, employers and more...</td>
+             </tr>
+             <tr>
+               <td bgcolor="#ffffff" style="padding-left:20px; padding-right:20px; padding-top: 14px; padding-bottom: 20px; font-family:Arial, Helvetica, sans-serif; font-size:17px; line-height:24px; color:#FFFFFF; font-weight: 400;"><table width="100%" border="0" cellspacing="0" cellpadding="0">
+                 <tr>
+                   <td colspan="3" align="center"  bgcolor="#ffffff" style="margin:0; padding:10px; padding-top:4px; padding-bottom:4px; color:#222222; font-family:Arial, Helvetica, sans-serif; font-size:19px; line-height:23px;  font-weight:bold; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px;" cellpadding="0" cellspacing="0" border="0"><table width="220" height="40" bgcolor="#ff8e00" cellpadding="0" cellspacing="0" align="center" style="margin:0; border-radius:5px; " border="0" valign="top">
+                       <tr>
+                         <td width="220" height="40" bgcolor="#ff8e00" cellpadding="0"cellspacing="0" align="center" valign="middle" style="margin:0; font-size:18px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; line-height:16px; border-radius:5px; font-weight:700; padding-right:0px; padding-left:0px; background-image:url(http://email-assets.jobcase.com/orange_grad.jpg); background-repeat:repeat-x; padding-top: 6px; padding-bottom: 4px; padding-left: 12px; padding-right: 12px;" border="0"><span style="font-size:15px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><span style="color:#ffffff;">View Details &rsaquo;</span></span></td>
+                       </tr>
+                     </table></td>
+                 </tr>
+                 </table></td>
+             </tr>
+                <tr>
+                <td bgcolor="#FFFFFF"  align="center" style="color:#223d5d; font-family:Arial, Helvetica, sans-serif; font-size:30px; line-height:30px; font-weight:300; padding-left: 20px; padding-right: 20px; padding-bottom: 20px; border-bottom-right-radius: 7px; border-bottom-left-radius: 7px;"><img src="http://email-assets.jobcase.com/jc/resource-image2.jpg" style="border-radius: 6px" width="100%" /></td>
+              </tr>
+             <tr>
+               <td colspan="3" align="center"  bgcolor="#295175" style="margin:0; padding:10px; padding-top:30px; padding-bottom:32px; color:#222222; font-family:Arial, Helvetica, sans-serif; font-size:19px; line-height:23px;  font-weight:bold; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px;" cellpadding="0" cellspacing="0" border="0"><table width="220" height="40" bgcolor="#ff8e00" cellpadding="0" cellspacing="0" align="center" style="margin:0; border-radius:5px; " border="0" valign="top">
+                   <tr>
+                     <td width="220" height="40" bgcolor="#ff8e00" cellpadding="0"cellspacing="0" align="center" valign="middle" style="margin:0; font-size:18px; color:#ffffff; font-family:'Roboto', Arial, Helvetica, sans-serif; line-height:16px; border-radius:5px; font-weight:700; padding-right:0px; padding-left:0px; background-image:url(http://email-assets.jobcase.com/orange_grad.jpg); background-repeat:repeat-x; padding-top: 6px; padding-bottom: 4px; padding-left: 12px; padding-right: 12px;" border="0"><span style="font-size:15px; color:#ffffff; font-family: Arial, Helvetica, sans-serif; line-height:16px;"><span style="color:#ffffff;">Go to Resource Center &rsaquo;</span></span></td>
+                   </tr>
+                 </table></td>
+             </tr>
+           </table>
+           </a></td>
+       </tr>
+       <tr>
+         <td colspan="2" align="center" bgcolor="" style="padding-top:30px; padding-bottom:35px; padding-left:0px; padding-right:0px; color:#FFFFFF; font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:14px; font-weight:normal;">%%=ContentArea("180")=%%</td>
+       </tr>
+     </table></td>
+ </tr>
+</table>
+</body>
+<custom name="opencounter" type="tracking">
+</html>
