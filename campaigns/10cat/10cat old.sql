@@ -309,6 +309,15 @@ FROM #sendable_universe_searches s
 INNER JOIN #search_jaccard cj ON cj.user_computed_state = s.user_computed_state AND cj.query1 = s.job_search_query_lower
 ;
 
+/***10CAT Coverage Rank Test 0720*/
+/*To reduce sctipt length, the following two tables are stored in dbm tables which are updated daily before the 10cat listgen runs*/
+-- generate kw historical coverage table with 14day lookback window (stored in dbm.search_coverage_5day )
+drop table if exists #search_coverage_5day;
+create table #search_coverage_5day as select * from dbm.search_coverage_5day;
+---- renormalize job search queries
+drop table if exists #canonical_queries;
+create table #canonical_queries as select * from dbm.canonical_queries_10cat;
+
 -------------- CBSA
 
 DROP TABLE IF EXISTS #search_counts_cbsa;
@@ -501,7 +510,38 @@ ORDER BY 1,
 3,
 4,
 5)
-WHERE item_rank <= 10;
+WHERE item_rank <= 20;
+
+-- //Coverage Rank Test 0720 - demo recs - control1//
+drop table if exists #demographic_searches_jaccard_control1;
+create table #demographic_searches_jaccard_control1 as
+ select * from #demographic_searches_jaccard
+ where item_rank <=10;
+
+-- //Coverage Rank Test 0720 - demo recs - test2//
+
+drop table if exists #demographic_searches_jaccard_test2;
+create table #demographic_searches_jaccard_test2 as
+select *
+from
+(
+select *,
+row_number() over(partition by user_computed_state, user_age, user_computed_gender, education order by coverage_estimate desc, item_rank asc) as rk2
+from
+(
+select dj.*
+ , coalesce(sc.coverage, avg(sc.coverage) over(partition by user_computed_state, user_age, user_computed_gender, education),0) as coverage_estimate
+ from #demographic_searches_jaccard dj
+ left join #canonical_queries cq on cq.job_search_query_lower = dj.job_search_query_lower
+ left join #search_coverage_5day sc on sc.job_search_query = cq.job_search_query and dj.job_search_query_lower is not null
+)
+)
+where rk2 <=10
+;
+
+update #demographic_searches_jaccard_test2
+set item_rank = rk2
+;
 
 ---- Assign each user to a demographic group
 DROP TABLE IF EXISTS #mailable_universe_demographics;
@@ -532,54 +572,31 @@ JOIN users u using(user_key)
 ;
 
 ----Attach demographic recommendations to each user
+-- //Coverage Rank Test 0720 - demo recs - union control1 and test2//
+
 DROP TABLE IF EXISTS #demographic_recs;
 CREATE TABLE #demographic_recs distkey(user_key) AS
 SELECT mu.user_key
 , d.job_search_query_lower
 , ROW_NUMBER() OVER(PARTITION BY user_key ORDER BY item_rank*RANDOM()) as item_rank
 FROM #mailable_universe_demographics mu
-INNER JOIN #demographic_searches_jaccard d ON mu.user_computed_state = d.user_computed_state
+INNER JOIN #demographic_searches_jaccard_control1 d ON mu.user_computed_state = d.user_computed_state
 AND mu.user_age = d.user_age
 AND mu.user_computed_gender = d.user_computed_gender
 AND mu.education = d.education
-;
+AND substring(md5(concat('cov0720', md5(mu.user_key))),5,1) < 'c'
 
----- renormalize job search queries
-DROP TABLE IF EXISTS #canonical_queries;
-CREATE TABLE #canonical_queries AS
-SELECT DISTINCT job_search_query
-, job_search_query_lower
-FROM
-(
-SELECT job_search_query
-, job_search_query_lower
-, ROW_NUMBER() OVER (PARTITION BY job_search_query_lower ORDER BY search_count DESC) item_rank
-FROM
-(
-SELECT s.job_search_query
-, replace(replace(replace(replace(lower(regexp_replace(s.job_search_query,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') job_search_query_lower
-, COUNT(DISTINCT s.job_search_key) search_count
-FROM mart.jobcase_emailable_universe l
-NATURAL JOIN
-(
-SELECT user_key
-, arrival_key
-, job_search_query
-, job_search_created_at
-, job_search_key
-FROM job_searches
-WHERE arrival_created_at > date_add('month',-6,getdate())
-AND job_search_query IS NOT NULL
-AND job_search_query != ''
-AND LENGTH(job_search_query) BETWEEN 3 AND 255
-) s
-GROUP BY 1,2
-)
-)
-WHERE item_rank = 1 and job_search_query_lower != ''
-and job_search_query_lower !='keyword'
-and job_search_query_lower is not null
-AND job_search_query NOT IN (SELECT q_parameter FROM dbm.keywords_to_remove)
+UNION
+
+SELECT mu.user_key
+, d.job_search_query_lower
+, ROW_NUMBER() OVER(PARTITION BY user_key ORDER BY item_rank asc) as item_rank
+FROM #mailable_universe_demographics mu
+INNER JOIN #demographic_searches_jaccard_test2 d ON mu.user_computed_state = d.user_computed_state
+AND mu.user_age = d.user_age
+AND mu.user_computed_gender = d.user_computed_gender
+AND mu.education = d.education
+AND substring(md5(concat('cov0720', md5(mu.user_key))),5,1) >= 'c'
 ;
 
 /*
@@ -787,15 +804,35 @@ A. Keywords member has searched before ("user_search")
 *****************/
 
 -- other member job search queries from last 12mo
+
+-- //Coverage Rank Test 0720//
+-- 'user_search query' Control1: ranked by n_searches
+-- 'user_search query' Test2: ranked by historical coverage
+
 DROP TABLE IF EXISTS #union_user_searches_2;
 CREATE TABLE #union_user_searches_2 distkey(user_key) sortkey(deduped_rankorder) AS
 select user_key
 , lowerkey
 , keyword
-, row_number() over(partition by user_key order by case when sent_yesterday then -1 else n_searches end desc) as rankorder
+,	case when substring(md5(concat('cov0720', md5(user_key))),5,1) < 'c' then
+            row_number() over(partition by user_key order by case when sent_yesterday then -1 else n_searches end desc)
+       else
+            row_number() over(partition by user_key order by case when sent_yesterday then -1 else coverage_estimate end desc, n_searches desc)
+       end as rankorder
 , rankorder + 40 as deduped_rankorder
 , '3_user_job_search_queries' as keyword_type
 from
+(
+select user_key
+, lowerkey
+, tb1.keyword as keyword
+-- TEST SPLIT HERE
+, coalesce(sc.coverage,avg(sc.coverage) over( partition by user_key),0) as coverage_estimate
+, sent_yesterday
+, n_searches
+from
+(
+select * from
 (
 select l.user_key
 , replace(replace(replace(replace(lower(regexp_replace(job_search_query,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '')
@@ -822,7 +859,12 @@ and lower(job_search_query) NOT IN (SELECT distinct LOWER(q_parameter) FROM dbm.
 group by 1,2,3,6
 )
 where dedup_rk = 1
+) tb1
+left join #search_coverage_5day sc
+on sc.job_search_query = tb1.keyword
+)
 ;
+
 
 -- Combine "user_search" recs, will later limit this group of recs to max 2 in email
 drop table if exists #union_user_searches;
@@ -848,8 +890,9 @@ B. Other Recommendations
 *****************/
 
 -- popular job search queries across email traffic
-DROP TABLE IF EXISTS #union_other_recs_1;
-CREATE TABLE #union_other_recs_1 distkey(user_key) sortkey(deduped_rankorder)
+-- //Coverage Rank Test 0720 - popular search recs - control1//
+DROP TABLE IF EXISTS #union_other_recs_1_control;
+CREATE TABLE #union_other_recs_1_control distkey(user_key) sortkey(deduped_rankorder)
 AS
 (
 SELECT DISTINCT u.user_key
@@ -914,7 +957,97 @@ ORDER BY randweight DESC LIMIT 12
 LEFT JOIN #q1 r
 ON u.user_key = r.user_key
 AND q.keyword = r.option
+where substring(md5(concat('cov0720', md5(u.user_key))),5,1) < 'c'
 );
+
+
+-- //Coverage Rank Test 0720 - popular search recs - test2//
+DROP TABLE IF EXISTS #union_other_recs_1_test2;
+CREATE TABLE #union_other_recs_1_test2 distkey(user_key) sortkey(deduped_rankorder)
+AS
+(
+SELECT DISTINCT u.user_key
+, LOWER(keyword) lowerkey
+, keyword
+, rankorder
+, CASE
+WHEN r.user_key IS NOT NULL THEN rankorder + 5003
+ELSE rankorder
+END AS deduped_rankorder
+, '4_popular_email_arrival_queries' AS keyword_type
+FROM
+(
+SELECT u.user_key
+FROM #jc_jobs_list_today u
+LEFT JOIN dbm.jobcase_suppression_list suppression ON u.user_key = suppression.user_key and suppression.suppress_domain IN ('jobcase.com','percipiomedia.com')
+WHERE suppression.user_key IS NULL
+) u
+CROSS JOIN
+(
+SELECT keyword
+, 60 + ROW_NUMBER() OVER (ORDER BY coverage_estimate DESC, randweight DESC) rankorder
+FROM
+(
+SELECT keyword
+, weighting
+, coverage_estimate
+, 10 *RANDOM() + weighting*(1.0 /(MAX(weighting) OVER ())) randweight
+, row_number() over(order by random() desc) random_sort
+FROM
+(
+select *
+from
+(
+SELECT keyword
+, SUM(clickcount) OVER (PARTITION BY lowerkey) weighting
+, ROW_NUMBER() OVER (PARTITION BY lowerkey ORDER BY clickcount DESC) rownum
+, coalesce(sc.coverage,0) as coverage_estimate
+FROM
+(
+SELECT f_url_param_utf8(arrival_url,'q') as keyword
+, replace(replace(replace(replace(lower(regexp_replace(keyword,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') as lowerkey
+, COUNT(*) clickcount
+FROM arrivals a
+WHERE arrival_computed_bot_classification IS NULL
+AND arrival_computed_device_type <> 'BOT'
+AND arrival_url LIKE '%q=%'
+AND arrival_created_at >= convert_timezone('America/New_York','UTC','today'::TIMESTAMP-INTERVAL '14 days')
+AND arrival_created_at < convert_timezone('America/New_York','UTC','today'::TIMESTAMP)
+AND arrival_computed_traffic_source = 'Percipio Email'
+AND arrival_url NOT LIKE '%view_job_detail%'
+GROUP BY 1,2
+) x
+  left join #search_coverage_5day sc
+  on sc.job_search_query = x.keyword
+WHERE lowerkey NOT IN ('','fulltime','parttime','immediate','seasonal','fullbenefits','2013','2014','2015','bachelorsdegree','mastersdegree','associatesdegree','highschooldiploma','ged'
+, 'full time','part time','immediate','seasonal','full benefits','2013','2014','2015','bachelors degree','masters degree','associates degree','highschool diploma','ged')
+AND lowerkey NOT ilike '%\\%%'
+AND lowerkey NOT in (SELECT lower(q_parameter) from dbm.keywords_to_remove)
+AND lowerkey NOT IN (SELECT replace(replace(replace(replace(lower(regexp_replace(q_parameter,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') FROM dbm.keywords_to_remove)
+)	tx
+WHERE rownum = 1
+AND keyword NOT ilike '%\\%%'
+AND keyword NOT IN (SELECT q_parameter FROM dbm.keywords_to_remove)
+ORDER BY weighting DESC
+LIMIT 250
+)
+)
+where random_sort <= 250
+ORDER BY coverage_estimate DESC, randweight DESC LIMIT 12
+) q
+LEFT JOIN #q1 r
+ON u.user_key = r.user_key
+AND q.keyword = r.option
+where substring(md5(concat('cov0720', md5(u.user_key))),5,1) >= 'c'
+);
+
+-- //Coverage Rank Test 0720 - union popular search recs control1 & test2//
+DROP TABLE IF EXISTS #union_other_recs_1;
+CREATE TABLE #union_other_recs_1 AS
+select * from #union_other_recs_1_control
+UNION
+select * from #union_other_recs_1_test2
+;
 
 DROP TABLE IF EXISTS #union_other_recs_1a;
 CREATE TABLE #union_other_recs_1a distkey(user_key)
@@ -942,21 +1075,40 @@ select cbsa_code
 , job_search_query_lower
 , users_searched
 , RANDOM() + 0.25 * users_searched*(1.0 /(MAX(users_searched) OVER (PARTITION BY cbsa_code))::float) as rand_weight
+, coverage_estimate
 from
 (
 select cbsa_code
-, job_search_query_lower
+, cb.job_search_query_lower
 , users_searched
-from #search_counts_cbsa
-where job_search_query_lower NOT IN (SELECT DISTINCT replace(replace(replace(replace(lower(regexp_replace(q_parameter,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') FROM dbm.keywords_to_remove)
+, coalesce(sc.coverage,0) as coverage_estimate
+from #search_counts_cbsa cb
+left join #canonical_queries cq on cq.job_search_query_lower = cb.job_search_query_lower
+left join #search_coverage_5day sc on  sc.job_search_query = cq.job_search_query and cb.job_search_query_lower is not null
+where cb.job_search_query_lower NOT IN (SELECT DISTINCT replace(replace(replace(replace(lower(regexp_replace(q_parameter,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') FROM dbm.keywords_to_remove)
 )
 )
 order by rk
 ;
 
-delete
+-- //Coverage Rank Test 0720 - cbsa query- control1//
+drop table if exists #popular_cbsa_queries_control;
+create table #popular_cbsa_queries_control as
+select *
 from #popular_cbsa_queries
-where rk > 28
+where rk<=28;
+
+-- //Coverage Rank Test 0720 - cbsa query - test2//
+drop table if exists #popular_cbsa_queries_test2;
+create table #popular_cbsa_queries_test2 as
+select *
+, row_number() over(partition by cbsa_code order by coverage_estimate desc, rand_weight desc) rk2
+from #popular_cbsa_queries_control
+;
+
+update #popular_cbsa_queries_test2
+SET
+rk = rk2
 ;
 
 -- take randomized list of 10 popular keywords in state
@@ -970,21 +1122,40 @@ select user_computed_state
 , job_search_query_lower
 , users_searched
 , RANDOM() + 0.25*users_searched*(1.0 /(MAX(users_searched) OVER (PARTITION BY user_computed_state)::float)) as rand_weight
+, coverage_estimate
 from
 (
 select user_computed_state
 -- , cbsa_code
-, job_search_query_lower
+, cb.job_search_query_lower
 , users_searched
-from #search_counts
-where job_search_query_lower NOT IN (SELECT DISTINCT replace(replace(replace(replace(lower(regexp_replace(q_parameter,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') FROM dbm.keywords_to_remove)
+, coalesce(sc.coverage,0) as coverage_estimate
+from #search_counts cb
+left join #canonical_queries cq on cq.job_search_query_lower = cb.job_search_query_lower
+left join #search_coverage_5day sc on  sc.job_search_query = cq.job_search_query and cb.job_search_query_lower is not null
+where cb.job_search_query_lower NOT IN (SELECT DISTINCT replace(replace(replace(replace(lower(regexp_replace(q_parameter,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') FROM dbm.keywords_to_remove)
 )
 )
 ;
 
-delete
+-- //Coverage Rank Test 0720 - state query - control1//
+drop table if exists #popular_state_queries_control;
+create table #popular_state_queries_control as
+select *
 from #popular_state_queries
-where rk > 28
+where rk<=28;
+
+-- //Coverage Rank Test 0720 - state query - test2//
+drop table if exists #popular_state_queries_test2;
+create table #popular_state_queries_test2 as
+select *
+, row_number() over(partition by user_computed_state order by coverage_estimate desc, rand_weight desc) rk2
+from #popular_state_queries_control
+;
+
+update #popular_state_queries_test2
+SET
+rk = rk2
 ;
 
 drop table if exists #member_cbsas;
@@ -993,6 +1164,8 @@ select mul.user_key, mul.state, c.cbsa_code, c.cbsa_title
 from analytics.zip_cbsa c
 join dbm.jc_mart_emailable_universe_locations mul on c.zipcode = mul.zip
 ;
+
+-- //Coverage Rank Test 0720 - union state-control1, state-test2, cbsa-control1, cbsa-test2//
 
 DROP TABLE IF EXISTS #union_other_recs_1b;
 CREATE TABLE #union_other_recs_1b distkey(user_key) as
@@ -1008,9 +1181,26 @@ select mu.user_key
 FROM mart.jobcase_emailable_universe mu
 INNER JOIN #jc_jobs_list_today l using(user_key)
 JOIN #member_cbsas c using(user_key)
-JOIN #popular_state_queries q on q.user_computed_state = c.state
+JOIN #popular_state_queries_control q on q.user_computed_state = c.state
 NATURAL JOIN #canonical_queries cq
 WHERE q.rk <= 28
+AND substring(md5(concat('cov0720', md5(mu.user_key))),5,1) < 'c'
+
+UNION
+
+select mu.user_key
+, q.job_search_query_lower as lowerkey
+, cq.job_search_query as keyword
+, rk as rankorder
+, 80 + rk as deduped_rankorder
+, '4__popular_state_queries' as keyword_type
+FROM mart.jobcase_emailable_universe mu
+INNER JOIN #jc_jobs_list_today l using(user_key)
+JOIN #member_cbsas c using(user_key)
+JOIN #popular_state_queries_test2 q on q.user_computed_state = c.state
+NATURAL JOIN #canonical_queries cq
+WHERE q.rk <= 28
+AND substring(md5(concat('cov0720', md5(mu.user_key))),5,1) >= 'c'
 
 UNION
 
@@ -1023,9 +1213,28 @@ select mu.user_key
 FROM mart.jobcase_emailable_universe mu
 INNER JOIN #jc_jobs_list_today l using(user_key)
 JOIN #member_cbsas c using(user_key)
-JOIN #popular_cbsa_queries q on q.cbsa_code = c.cbsa_code
+JOIN #popular_cbsa_queries_control q on q.cbsa_code = c.cbsa_code
 NATURAL JOIN #canonical_queries cq
 WHERE q.rk <= 28
+AND substring(md5(concat('cov0720', md5(mu.user_key))),5,1) < 'c'
+
+
+UNION
+
+select mu.user_key
+, q.job_search_query_lower as lowerkey
+, cq.job_search_query as keyword
+, rk as rankorder
+, 50 + rk as deduped_rankorder
+, '4__popular_cbsa_queries' as keyword_type
+FROM mart.jobcase_emailable_universe mu
+INNER JOIN #jc_jobs_list_today l using(user_key)
+JOIN #member_cbsas c using(user_key)
+JOIN #popular_cbsa_queries_test2 q on q.cbsa_code = c.cbsa_code
+NATURAL JOIN #canonical_queries cq
+WHERE q.rk <= 28
+AND substring(md5(concat('cov0720', md5(mu.user_key))),5,1) >= 'c'
+
 ) q
 LEFT JOIN #r1 r
 ON q.user_key = r.user_key

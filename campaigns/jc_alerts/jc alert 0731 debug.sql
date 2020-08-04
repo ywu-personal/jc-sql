@@ -32,7 +32,7 @@ SELECT
 FROM
   dbm.jobcase_email_content_cadence
 WHERE
-  send_date = CONVERT_TIMEZONE('America/New_York','2020-07-10 23:30:00')::DATE
+  send_date = CONVERT_TIMEZONE('America/New_York',SYSDATE)::DATE
   -- for now use cross-cadence from above
   AND (content_type IN ('JobAlert') OR (content_type IN ('JobSharing') AND tplus_type IN ('tp-dslc-','tp-dslo-')))
   -- cadence_email_domain_group has following values
@@ -70,7 +70,7 @@ THEN CASE WHEN SUBSTRING(MD5(u.user_key),1,1) < 8
 THEN 'A'
 ELSE 'B'
 END
-ELSE CASE WHEN DATEDIFF('day',membership_arrival_created_at,'2020-07-10 23:30:00') < 10 AND DATEDIFF('day',membership_arrival_created_at,'2020-07-10 23:30:00') >= 5
+ELSE CASE WHEN DATEDIFF('day',membership_arrival_created_at,getdate()) < 10 AND DATEDIFF('day',membership_arrival_created_at,getdate()) >= 5
 THEN CASE WHEN random() <= 0.75
 THEN 'C'
 ELSE CASE WHEN SUBSTRING(MD5(u.user_key),1,1) < 8
@@ -110,7 +110,7 @@ FROM
   (SELECT ar.user_key
   , MIN(date_diff('days',CASE WHEN ar.arrival_url ILIKE '%job%\\_alerts\\_%' OR ar.arrival_url ILIKE '%J%_Alerts%' OR ar.arrival_url ILIKE '%j%_offer=%'
   THEN ar.arrival_created_at
-  ELSE '2010-01-01' END, '2020-07-10 23:30:00')) dsl_a_alert
+  ELSE '2010-01-01' END, getdate())) dsl_a_alert
   ,MAX(CASE WHEN arrival_url ILIKE '%job%\\_alerts\\_%' OR arrival_url ILIKE '%J%_Alerts%' OR arrival_url ILIKE '%j%_offer=%' THEN arrival_created_at END) last_alert_arrival
   ,MAX(CASE WHEN lower(arrival_domain) = 'jobcase.com' THEN arrival_created_at END) last_jc_arrival
   ,MAX(arrival_created_at) last_all_arrival
@@ -120,7 +120,7 @@ FROM
   AND ar.arrival_computed_traffic_type = 'Email'
   GROUP BY 1) a ON a.user_key = u.user_key
   --
-  LEFT JOIN (SELECT user_key, MIN(date_diff('days',COALESCE(er.arrival_created_at, '2010-01-01'),'2020-07-10 23:30:00')) dsl_r
+  LEFT JOIN (SELECT user_key, MIN(date_diff('days',COALESCE(er.arrival_created_at, '2010-01-01'),getdate())) dsl_r
   FROM event_registrations er GROUP BY 1) ereg ON ereg.user_key = u.user_key
   --
   LEFT JOIN (SELECT
@@ -168,7 +168,7 @@ job_search_query,
 job_search_created_at,
 job_search_key
 FROM job_searches
-WHERE arrival_created_at > date_add('month',-6,CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00'))
+WHERE arrival_created_at > date_add('month',-6,CONVERT_TIMEZONE('America/New_York', getdate()))
 AND job_search_query IS NOT NULL
 AND job_search_query != ''
 AND LENGTH(job_search_query) BETWEEN 3 AND 255) s
@@ -235,9 +235,9 @@ SELECT user_key
 , most_recent_job_search_arrival
 , explicit_searches
 , implicit_searches
-, datediff('days', most_recent_job_search_arrival, CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')) AS dsljs
-, min(datediff('days', most_recent_job_search_arrival, CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00'))) over(PARTITION BY user_key) AS dsljs_min
-, max(datediff('days', most_recent_job_search_arrival, CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00'))) over(PARTITION BY user_key) AS dsljs_max
+, datediff('days', most_recent_job_search_arrival, CONVERT_TIMEZONE('America/New_York', getdate())) AS dsljs
+, min(datediff('days', most_recent_job_search_arrival, CONVERT_TIMEZONE('America/New_York', getdate()))) over(PARTITION BY user_key) AS dsljs_min
+, max(datediff('days', most_recent_job_search_arrival, CONVERT_TIMEZONE('America/New_York', getdate()))) over(PARTITION BY user_key) AS dsljs_max
 FROM
 (
 	SELECT l.user_key
@@ -256,7 +256,7 @@ FROM
 		SELECT user_key
 		, arrival_key
 		FROM arrivals
-		WHERE arrival_created_at > date_add('month',-6,CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00'))
+		WHERE arrival_created_at > date_add('month',-6,CONVERT_TIMEZONE('America/New_York', getdate()))
 		AND arrival_url NOT ILIKE '%JC_Job_Sharing%'
 	) a
 	NATURAL JOIN job_searches js
@@ -295,7 +295,7 @@ LEFT JOIN (
   , replace(replace(replace(replace(lower(regexp_replace(job_search_query,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') job_search_query_lower
   , max(send_date) AS most_recent_send_date
   FROM dbm.jc_alerts_search_recs_history
-  WHERE send_date < CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date
+  WHERE send_date < CONVERT_TIMEZONE('America/New_York', getdate())::date
   GROUP BY 1,2
 ) r ON a.user_key = r.user_key AND a.job_search_query_lower = r.job_search_query_lower
 WHERE searches_over_10 > 0
@@ -319,10 +319,10 @@ LEFT JOIN (
   , replace(replace(replace(replace(lower(regexp_replace(job_search_query,'[^a-zA-Z\d]', '')), 'jobs', ''), 'job', ''), 'applications', ''), 'application', '') job_search_query_lower
   , max(send_date) AS most_recent_send_date
   FROM dbm.jc_alerts_search_recs_history
-  WHERE send_date < CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date
+  WHERE send_date < CONVERT_TIMEZONE('America/New_York', getdate())::date
   GROUP BY 1,2
 ) r ON a.user_key = r.user_key AND a.profile_interest_job_title_lower = r.job_search_query_lower
-WHERE most_recent_send_date2 <= CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00') - interval '3 days'
+WHERE most_recent_send_date2 <= CONVERT_TIMEZONE('America/New_York', getdate()) - interval '3 days'
 );
 
 -- Take the top query & locations based on different rankings of user searches
@@ -330,7 +330,7 @@ DROP TABLE IF EXISTS #jc_alerts_search_recs_history;
 CREATE TABLE #jc_alerts_search_recs_history
 DISTKEY(user_key) AS (
 SELECT t.user_key
-, CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date AS send_date
+, CONVERT_TIMEZONE('America/New_York', getdate())::date AS send_date
 , CASE
 	WHEN p.profile_interest_job_title IS NOT NULL THEN 'A'
 	ELSE 'C' END AS test_group
@@ -349,14 +349,14 @@ DROP TABLE IF EXISTS #jc_alerts_reengage_stats;
 CREATE TABLE #jc_alerts_reengage_stats
 DISTKEY(user_key) AS (
 SELECT DISTINCT r.user_key
-, datediff('days',coalesce(max(js.job_search_created_at),'2018-01-01'::date),'2020-07-10 23:30:00') AS dsljs
+, datediff('days',coalesce(max(js.job_search_created_at),'2018-01-01'::date),getdate()) AS dsljs
 FROM #jc_alerts_listgen_rw r
 NATURAL JOIN
 	(
 		SELECT user_key
 		, arrival_key
 		FROM arrivals
-		WHERE arrival_created_at > date_add('month',-6,CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00'))
+		WHERE arrival_created_at > date_add('month',-6,CONVERT_TIMEZONE('America/New_York', getdate()))
 		AND arrival_url NOT ILIKE '%JC_Job_Sharing%'
 	) a
 NATURAL JOIN job_searches js
@@ -379,8 +379,8 @@ DROP TABLE IF EXISTS #mailable_audience;
 CREATE TABLE #mailable_audience distkey(user_key) AS
 select
 cc.*
-, datediff('day', a.latest_jc_arrival_created_at_local, convert_timezone('America/New_York', '2020-07-10 23:30:00')) as days_since_latest_jc_arrival
-, datediff('day', u.membership_arrival_created_at::date, '2020-07-10 23:30:00'::date) as days_since_first_jcn_registration
+, datediff('day', a.latest_jc_arrival_created_at_local, convert_timezone('America/New_York', getdate())) as days_since_latest_jc_arrival
+, datediff('day', u.membership_arrival_created_at::date, getdate()::date) as days_since_first_jcn_registration
 , u.membership_arrival_application
 , u.membership_arrival_created_at
 
@@ -402,7 +402,7 @@ where arrival_computed_bot_classification IS NULL
 ) a on a.user_key = cc.user_key
 
 where true
-and cc.send_date = convert_timezone('America/New_York', '2020-07-10 23:30:00')::date
+and cc.send_date = convert_timezone('America/New_York', getdate())::date
 and cc.sending_grouping = 'JOBCASE'
 ;
 
@@ -436,14 +436,14 @@ CREATE TABLE #hot_job_send_list
 DISTKEY(user_key) AS (
 SELECT
 DISTINCT r.user_key
-,CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00'::date + interval '1 day')::date AS send_date
+,CONVERT_TIMEZONE('America/New_York', getdate() + interval '1 day')::date AS send_date
 FROM
 #jc_alerts_listgen_rw r
 INNER JOIN #mailable_audience a ON a.user_key = r.user_key
 INNER JOIN dbm.v_jobcase_job_recommendations h ON h.user_key = r.user_key
 LEFT JOIN #welcome_hot_job_sends wh ON wh.user_key = r.user_key
 WHERE
-MOD(DATEDIFF(DAY, a.membership_arrival_created_at::DATE, '2020-07-10 23:30:00'::DATE), 14) IN (1,3,5,7,9,11,13) -- mod14
+MOD(DATEDIFF(DAY, a.membership_arrival_created_at::DATE, GETDATE()::DATE), 14) IN (1,3,5,7,9,11,13) -- mod14
 AND wh.user_key IS NULL
 AND (email_address_domain_group != 'MSN' or substring(md5(concat('s73j', md5(r.user_key))),5,1) < 'c')
 );
@@ -467,7 +467,7 @@ NATURAL JOIN users u
 JOIN mart.jobcase_emailable_universe mu ON u.user_key = mu.user_key
 WHERE a.arrival_computed_traffic_type = 'Email'
   AND a.arrival_computed_bot_classification IS NULL
-  AND a.arrival_created_at >= '2020-07-10 23:30:00'::date - interval '14 days'
+  AND a.arrival_created_at >= getdate() - interval '14 days'
   AND u.membership_arrival_created_at IS NOT NULL
   AND a.arrival_application = 'jobcase.com'
 	AND a.arrival_url ILIKE '%jc_alerts%'
@@ -483,7 +483,7 @@ DISTINCT user_key
 FROM
 #hot_job_send_list
 WHERE
-send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00'::date+ interval '1 day')::date
+send_date = CONVERT_TIMEZONE('America/New_York', getdate()+ interval '1 day')::date
 AND user_key NOT IN (SELECT DISTINCT user_key FROM #jc_previous_jc_alerts_arrivals
 	WHERE arrival_count >=1
 	)
@@ -497,8 +497,8 @@ DELETE FROM #jc_alerts_search_recs_history
 	WHERE
 	user_key IN
 		(SELECT DISTINCT user_key FROM #hot_job_send_list_exclude
-		WHERE send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00'::date+interval '1 day')::date)
-	AND send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date
+		WHERE send_date = CONVERT_TIMEZONE('America/New_York', getdate()+interval '1 day')::date)
+	AND send_date = CONVERT_TIMEZONE('America/New_York', getdate())::date
 ;
 
 -- update tables statistics to improve join query performance below
@@ -530,7 +530,7 @@ FROM outbound_job_searches
 NATURAL JOIN outbound_job_search_impressions ojsi
 
 WHERE outbound_job_search_query IS NOT NULL
-	AND outbound_job_search_created_at >= '2020-07-10 23:30:00'::date - interval '5 days'
+	AND outbound_job_search_created_at >= getdate() - interval '5 days'
 GROUP BY 1,2
 )
 GROUP BY 1
@@ -544,7 +544,7 @@ DISTKEY(user_key) AS (
 		r.user_key
 		, h.job_search_query
 	FROM #jc_alerts_listgen_rw r
-	INNER JOIN #jc_alerts_search_recs_history h ON h.user_key = r.user_key AND h.send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date
+	INNER JOIN #jc_alerts_search_recs_history h ON h.user_key = r.user_key AND h.send_date = CONVERT_TIMEZONE('America/New_York', getdate())::date
 	INNER JOIN #ff_coverage ff ON ff.outbound_job_search_query = h.job_search_query
   LEFT JOIN dbm.jc_email_company_suppression_patterns p ON h.job_search_query ILIKE p.company_name_pattern
   	AND p.suppress_from_company_emails = TRUE
@@ -570,7 +570,7 @@ FROM outbound_job_searches ojs
 NATURAL JOIN outbound_job_search_impressions ojsi
 
 WHERE outbound_job_search_normalized_query IS NOT NULL
-	AND outbound_job_search_created_at >= '2020-07-10 23:30:00'::date - interval '1 days'
+	AND outbound_job_search_created_at >= getdate() - interval '1 days'
 GROUP BY 1,2
 HAVING count(DISTINCT CASE WHEN outbound_job_search_impression_job_title ILIKE '%' || outbound_job_search_normalized_query || '%'
 OR outbound_job_search_impression_company_name ILIKE '%' || outbound_job_search_normalized_query || '%' THEN outbound_job_search_key END) > 0
@@ -588,7 +588,7 @@ LEFT JOIN #job_search_query_and_locations_yielding_job_match m
 	AND m.outbound_job_search_location = ojs.job_search_location
 
 WHERE job_search_normalized_query IS NOT NULL
-	AND job_search_created_at >= '2020-07-10 23:30:00'::date - interval '1 days'
+	AND job_search_created_at >= getdate() - interval '1 days'
 	AND m.outbound_job_search_normalized_query IS NULL
 GROUP BY 1,2
 HAVING count(DISTINCT CASE WHEN job_search_impression_job_title ILIKE '%' || job_search_normalized_query || '%'
@@ -601,7 +601,7 @@ SELECT
 	r.user_key
 	, h.job_search_query
 FROM #jc_alerts_listgen_rw r
-INNER JOIN #jc_alerts_search_recs_history h ON h.user_key = r.user_key AND h.send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date
+INNER JOIN #jc_alerts_search_recs_history h ON h.user_key = r.user_key AND h.send_date = CONVERT_TIMEZONE('America/New_York', getdate())::date
 INNER JOIN #job_search_query_and_locations_yielding_job_match ff
 	ON ff.outbound_job_search_normalized_query = h.job_search_query
 	AND ff.outbound_job_search_location = h.job_search_location
@@ -644,7 +644,7 @@ SELECT
 DISTINCT user_key
 ,CASE WHEN user_computed_city = 'FF_Available' THEN 'ff' ELSE 'none' END AS ff_group
 ,from_name
-,CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date AS send_date
+,CONVERT_TIMEZONE('America/New_York', getdate())::date AS send_date
 FROM #jc_alerts_listgen_rw
 );
 
@@ -668,7 +668,7 @@ FROM
   JOIN #jc_alerts_search_recs_ranked s
   	ON s.user_key = r.user_key
 
-  WHERE r.send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date
+  WHERE r.send_date = CONVERT_TIMEZONE('America/New_York', getdate())::date
   	AND s.rk <> 1
   	AND s.job_search_query NOT ILIKE '%work%home%'
   	AND s.job_search_query NOT IN (SELECT q_parameter FROM dbm.keywords_to_remove)
@@ -719,11 +719,13 @@ WHERE TRUE
 -- Test 07/09: Update test group from_name to '[City/State] Jobs (via Jobcase)'
 UPDATE #jc_alerts_listgen_rw
 SET
-from_name = coalesce(u.user_computed_city,u.user_computed_state) || ' Jobs (via Jobcase)'
+from_name = coalesce(cp.user_computed_city,cp.user_computed_state) || ' Jobs (via Jobcase)'
 FROM #jc_alerts_listgen_rw r
-INNER JOIN users u on u.user_key = r.user_key
-WHERE substring(md5(concat('ff0709', md5(r.user_key))),6,1) >= 'e'
-     AND coalesce(u.user_computed_city,u.user_computed_state) is not null
+INNER JOIN #jc_alerts_listgen_rw_copy cp on r.user_key = cp.user_key
+INNER JOIN #jc_alerts_search_recs_history h on h.user_key = r.user_key
+WHERE substring(md5(concat('itrbg0731', md5(r.user_key))),6,1) > '3'
+     AND h.test_group != 'A'
+     AND coalesce(cp.user_computed_city,cp.user_computed_state) is not null
 ;
 
 -- --------------------------------------------------------
@@ -733,43 +735,11 @@ WHERE substring(md5(concat('ff0709', md5(r.user_key))),6,1) >= 'e'
 DELETE dbm.jc_alerts_listgen_rw WHERE 1;
 INSERT INTO dbm.jc_alerts_listgen_rw (SELECT * FROM #jc_alerts_listgen_rw);
 
-DELETE FROM dbm.jc_alerts_search_recs_history WHERE send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date;
+DELETE FROM dbm.jc_alerts_search_recs_history WHERE send_date = CONVERT_TIMEZONE('America/New_York', getdate())::date;
 INSERT INTO dbm.jc_alerts_search_recs_history (SELECT * FROM #jc_alerts_search_recs_history);
 
 DELETE FROM dbm.hot_job_send_list;
 INSERT INTO dbm.hot_job_send_list (SELECT * FROM #hot_job_send_list);
 
-DELETE FROM dbm.jc_alerts_ff_record WHERE send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date;
+DELETE FROM dbm.jc_alerts_ff_record WHERE send_date = CONVERT_TIMEZONE('America/New_York', getdate())::date;
 INSERT INTO dbm.jc_alerts_ff_record (SELECT * FROM #jc_alerts_ff_record);
-
-
-
-/* MAIN SQL */
-(SELECT
-  r.user_key,
-  MIN(email_sending_domain || '_' || wave || '_' || AB_category_bragi) AS segment,
-  MIN(NULL) AS data001, -- unused
-  MIN(from_name) AS data002, -- used for FF
-  MIN(AB_category_creative) AS data003, -- used by ET query
-  MIN(oq.other_recommended_job_search_queries) AS data004, -- used by keywords section
- 	MIN(CASE WHEN uz.user_key IS NOT NULL AND uz.n_users <= 500 THEN 'low_density_population' ELSE 'control' END) AS data005, -- determines eligibility for lower radius in bragi call
-  MIN(h.test_group) AS data006,
-  MIN(h.job_search_query) AS data007,
-  MIN(h.job_search_location) AS data008,
-  MIN(CASE WHEN rg.user_key IS NOT NULL THEN 'reengage' ELSE 'false' END) AS data009,
-  MIN(0) AS data010 -- unused
-FROM
-  dbm.jc_alerts_listgen_rw r
-  JOIN mart.jobcase_emailable_universe mu ON mu.user_key = r.user_key
-	LEFT JOIN #users_by_zip_population uz ON r.user_key = uz.user_key
-  LEFT JOIN dbm.jc_alerts_search_recs_history h ON h.user_key = r.user_key AND h.send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00')::date
-	LEFT JOIN #jc_alerts_reengage_group rg
-    ON r.user_key = rg.user_key
-  LEFT JOIN #hot_job_send_list_exclude hj ON hj.user_key = r.user_key AND hj.send_date = CONVERT_TIMEZONE('America/New_York', '2020-07-10 23:30:00'::date + interval '1 day')::date
-  LEFT JOIN #other_recommended_job_search_queries_agg oq
-    ON oq.user_key = r.user_key
-WHERE
-  email_service_provider = 'ET'
-	AND hj.user_key IS NULL
-GROUP BY 1
-)

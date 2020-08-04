@@ -10,8 +10,8 @@ from
 (
 select datediff('days', c.communication_sent_time, a.arrival_created_at) as ds_welcome_sent
 , convert_timezone('America/New_York', c.communication_sent_time)::date as welcome_send_date
-, case when coalesce(c.communication_vendor_template_name, c.outbound_communication_template_name) = 'JC_TR_ALL_Welcome_Reg' then 'ET'
-       when coalesce(c.communication_vendor_template_name, c.outbound_communication_template_name) = 'welcome_email' then 'OCS'
+, case when coalesce(c.communication_vendor_template_name, outbound_communication_template_name) = 'JC_TR_ALL_Welcome_Reg' then 'ET'
+       when coalesce(c.communication_vendor_template_name, outbound_communication_template_name) = 'welcome_email' then 'OCS'
        else 'Other'
        end as is_ocs
 , case when substring(md5(concat('xy20',md5(c.user_key))),4,1)<'2' then 'Holdout'
@@ -69,10 +69,6 @@ convert_timezone('America/New_York', c.communication_sent_time)::date as welcome
 , case when substring(md5(concat('xy20',md5(c.user_key))),4,1)<'2' then 'Holdout'
        when substring(md5(concat('xy20',md5(c.user_key))),4,1)>='c' then 'Test'
        else 'Other' end as Test_group
-, case when coalesce(c.communication_vendor_template_name, c.outbound_communication_template_name) = 'JC_TR_ALL_Welcome_Reg' then 'ET'
-       when coalesce(c.communication_vendor_template_name, c.outbound_communication_template_name) = 'welcome_email' then 'OCS'
-       else 'Other'
-       end as is_ocs
 , count(distinct c.user_key) as user_count
 from
 communications c
@@ -81,11 +77,10 @@ coalesce(c.communication_vendor_template_name, c.outbound_communication_template
 and communication_sent_time >= convert_timezone('America/New_York', 'UTC', '2020-03-20 13:00')
   and convert_timezone('America/New_York', communication_sent_time)::Date != '2020-03-31'
   and convert_timezone('America/New_York', communication_sent_time)::Date != '2020-04-01'
-group by 1,2,3
+group by 1,2
 )
 n on n.test_group = i.test_group
 and n.welcome_send_date = i.welcome_send_date
-and n.is_ocs = i.is_ocs
 left join
 (
 select datediff('days', c.communication_sent_time, c2.communication_sent_time) as ds_welcome_sent
@@ -93,10 +88,6 @@ select datediff('days', c.communication_sent_time, c2.communication_sent_time) a
 , case when substring(md5(concat('xy20',md5(c.user_key))),4,1)<'2' then 'Holdout'
        when substring(md5(concat('xy20',md5(c.user_key))),4,1)>='c' then 'Test'
        else 'Other' end as Test_group
-, case when coalesce(c.communication_vendor_template_name, c.outbound_communication_template_name) = 'JC_TR_ALL_Welcome_Reg' then 'ET'
-       when coalesce(c.communication_vendor_template_name, c.outbound_communication_template_name) = 'welcome_email' then 'OCS'
-       else 'Other'
-       end as is_ocs
 , count(distinct case when c2.communication_failure_time IS NULL THEN c2.communication_id END) AS emails_sent
 from users u
 inner join communications c
@@ -111,12 +102,11 @@ left join communications c2
 	and c2.communication_sent_time >= convert_timezone('America/New_York','UTC', '2020-03-20 13:00')
 	  and convert_timezone('America/New_York', c2.communication_sent_time)::Date != '2020-03-31'
   and convert_timezone('America/New_York', c2.communication_sent_time)::Date != '2020-04-01'
-group by 1,2,3,4
+group by 1,2,3
 )
 n2 on n2.test_group = i.test_group
 and n2.welcome_send_date = i.welcome_send_date
 and n2.ds_welcome_sent = i.ds_welcome_sent
-and n2.is_ocs = i.is_ocs
 left join
 (
 select datediff('days', c.communication_sent_time, c2.communication_sent_time) as ds_welcome_sent
@@ -124,10 +114,6 @@ select datediff('days', c.communication_sent_time, c2.communication_sent_time) a
 , case when substring(md5(concat('xy20',md5(c.user_key))),4,1)<'2' then 'Holdout'
        when substring(md5(concat('xy20',md5(c.user_key))),4,1)>='c' then 'Test'
        else 'Other' end as Test_group
-, case when coalesce(c.communication_vendor_template_name, c.outbound_communication_template_name) = 'JC_TR_ALL_Welcome_Reg' then 'ET'
-       when coalesce(c.communication_vendor_template_name, c.outbound_communication_template_name) = 'welcome_email' then 'OCS'
-       else 'Other'
-       end as is_ocs
 , count(distinct case when c2.communication_failure_time IS NULL THEN c2.communication_id END) AS emails_sent
 from users u
 inner join communications c
@@ -143,12 +129,11 @@ left join communications c2
 	  and convert_timezone('America/New_York', c2.communication_sent_time)::Date != '2020-03-31'
   and convert_timezone('America/New_York', c2.communication_sent_time)::Date != '2020-04-01'
   and coalesce(c2.communication_vendor_template_name, c2.outbound_communication_template_name) in  ('JC_TR_ALL_Welcome_Reg','welcome_email')
-group by 1,2,3,4
+group by 1,2,3
 )
 n3 on n3.test_group = i.test_group
 and n3.welcome_send_date = i.welcome_send_date
 and n3.ds_welcome_sent = i.ds_welcome_sent
-and n3.is_ocs = i.is_ocs
 -- left join
 -- (
 -- select
