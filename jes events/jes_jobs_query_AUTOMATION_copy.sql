@@ -670,6 +670,97 @@ insert into dbm.jc_jes_jobs_email_send_record
   join #jobs j on j.campaign_id = a.campaign_id
   ;
 
+-- add audience for ShakeShack brand boost 08/04/2020
+--
+
+insert into dbm.jc_jes_jobs_campaign_details_record
+  select
+  'ShakeShack_1' as campaign_id
+  , 'ShakeShack' as employer_name
+  , convert_timezone('America/New_York', getdate())::date as send_date
+  , convert_timezone('America/New_York', getdate()) as pull_time
+  , null as job_title
+  , null as job_city
+  , null as job_state
+  , null as job_zip
+  , 'VnPndXNgbhLyqMhQ6aYft5ith7U' as posting_key
+  , ('https://jobcase.com/jobs/'|| posting_key || '/listing-check?iframe=false') as job_url
+  , 1.0 as job_rk
+  , 1 as special_promotion
+  , 'BRANDING' as special_promotion_type
+  , 1 as campaign_version
+  , null as special_promotion_variable
+  where convert_timezone('America/New_York', getdate())::date in ('2020-08-04')
+  ;
+
+
+  drop table if exists #audience_shakeshack;
+    create table #audience_shakeshack distkey(user_key)
+    as
+    select distinct cc.user_key
+    , 'ShackShack_1' as campaign_id
+    from dbm.jobcase_email_content_cadence cc
+    inner join dbm.jc_mart_emailable_universe_locations mul
+      on cc.user_key = mul.user_key
+      and mul.state = 'CA'
+    left join dbm.jc_jes_jobs_email_send_record r on r.user_key = cc.user_key
+      and r.send_date = convert_timezone('America/New_York', getdate())::date
+    where true
+    and cc.send_date = getdate()::date
+    and cc.sending_grouping = 'JOBCASE'
+    and cc.content_type in ('Company', 'JobAlert', 'Standard')
+    and
+    (
+      (
+        cc.cadence_email_domain_group in ('GMAIL', 'MSN')
+        and cc.user_key IN
+        (
+          SELECT DISTINCT user_key
+          FROM communications
+          WHERE communication_channel = 'EMAIL'
+          AND (communication_open_time_latest >= getdate() - INTERVAL '20 days'
+          OR communication_click_time_latest >= getdate() - INTERVAL '20 days')
+        )
+        and cc.tplus_type not in ('tp-dslr-ne-', 'tp-dslrr-ne-')
+      )
+      or cc.cadence_email_domain_group not in ('GMAIL', 'MSN')
+      or cc.cadence_email_domain_group is null
+    )
+    and cc.tplus_type != 'tp-wb-dslr-'
+    and cc.user_entered_email not in
+    (
+      select distinct emailaddress
+      from dbm.jobcase_preferences
+      where offer_id in ('1', '15', '22', '26', '27', '36', '42', '43', '45', '60', '69', '72', '80','127', '132')
+    )
+    and
+    (
+      convert_timezone('America/New_York', getdate())::date = '2020-08-04'
+    )
+    and cc.user_key in (
+  select distinct user_key
+  from job_search_impressions
+  where arrival_created_at > getdate() - interval '20 days'
+  and job_search_impression_onet_soc_code in ('35-1012.00', '11-9051.00', '35-3021.00')
+  )
+    and r.user_key is null -- don't send jes jobs more than once to a member in a day
+    --order by dsla asc
+    limit 100000
+    ;
+
+
+
+  insert into dbm.jc_jes_jobs_email_send_record
+    select
+    user_key
+    , convert_timezone('America/New_York', getdate())::date as send_date
+    , convert_timezone('America/New_York', getdate()) as pull_time
+    , ssa.campaign_id as campaign_id
+    , 'ShakeShack' as employer_name
+    , 1 as campaign_version --test this
+    from #audience_shakeshack ssa -- change to audience_cap with daily cap
+    ;
+
 
 
 --check counts by campaign_id and employer_name

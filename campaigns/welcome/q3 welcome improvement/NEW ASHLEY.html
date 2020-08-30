@@ -1,0 +1,110 @@
+-- add audience for liveops brand boost 08/26/2020 09/02/2020
+  --
+  insert into dbm.jc_jes_jobs_campaign_details_record
+    select
+    'Liveops_1' as campaign_id
+    , 'Liveops' as employer_name
+    , convert_timezone('America/New_York', getdate())::date as send_date
+    , convert_timezone('America/New_York', getdate()) as pull_time
+    , 'Customer Service Reps' as job_title
+    , null as job_city
+    , null as job_state
+    , null as job_zip
+    , 'cF0LqIL2Tder8A5h7UB1JGCQV44' as posting_key
+    , ('https://jobcase.com/jobs/'|| posting_key || '/listing-check?iframe=false') as job_url
+    , 1.0 as job_rk
+    , 1 as special_promotion
+    , 'BRANDING' as special_promotion_type
+    , 1 as campaign_version
+    , null as special_promotion_variable
+    where convert_timezone('America/New_York', getdate())::date in ('2020-08-26','2020-09-02')
+    ;
+
+
+    drop table if exists #audience_liveops;
+    create table #audience_liveops as
+    select
+    distinct cc.user_key
+    , 'Liveops_1' as campaign_id
+    , case when r.user_key is not null then 0
+           else 999 end as priority
+    from dbm.jobcase_email_content_cadence cc
+    inner join users u on u.user_key = cc.user_key
+    inner join
+    (
+      select distinct a.zipcode, a.zipcode2
+      from mart.zip_to_zip_within_50m_distances a
+     where (
+          a.distance < 30
+          and a.zipcode in ('30106','29169','20706','75126','76053','38654','21201','27606','43110','80014','19901','46394','62203',
+          '23651','29841','75115','29609','29501','73008','32009') -- target zip codes
+       )
+    ) z on z.zipcode2 = substring(u.user_entered_zip_code,1,5)
+    left join
+    (
+      select distinct a.user_key
+      from arrivals a
+      natural join job_search_impressions
+      where a.arrival_created_at > getdate() - interval '20 days'
+      and
+      (
+      job_search_impression_onet_soc_code in ('43-4051.00', '41-9041.00', '41-2031.00') -- members interested in CSR
+      or
+        (
+         a.arrival_url ilike '%content_keywords=remote%' -- members interested in remote jobs
+         and arrival_application = 'jobcase.com'
+         and arrival_computed_traffic_type = 'Email'
+         and arrival_computed_bot_classification is null
+         )
+      )
+    ) r on r.user_key = cc.user_key
+    where true
+    and cc.send_date = getdate()::date
+    and
+    (
+      convert_timezone('America/New_York', getdate())::date = '2020-08-26'
+      or
+      convert_timezone('America/New_York', getdate())::date = '2020-09-02'
+    ) --target send date 08/26 09/02
+    and cc.sending_grouping = 'JOBCASE'
+    and cc.content_type in ('Company', 'JobAlert', 'Standard')
+
+    and
+    (
+      (
+        cc.cadence_email_domain_group in ('GMAIL', 'MSN')
+        and cc.user_key IN
+        (
+          SELECT DISTINCT user_key
+          FROM communications
+          WHERE communication_channel = 'EMAIL'
+          AND (communication_open_time_latest >= getdate() - INTERVAL '20 days'
+          OR communication_click_time_latest >= getdate() - INTERVAL '20 days')
+        )
+        and cc.tplus_type not in ('tp-dslr-ne-', 'tp-dslrr-ne-')
+      )
+      or cc.cadence_email_domain_group not in ('GMAIL', 'MSN')
+      or cc.cadence_email_domain_group is null
+    )
+    and cc.tplus_type != 'tp-wb-dslr-'
+
+    and cc.user_entered_email not in
+    (
+      select distinct emailaddress
+      from dbm.jobcase_preferences
+      where offer_id in ('1', '15', '22', '26', '27', '36', '42', '43', '45', '60', '69', '72', '80','127', '132')
+    )
+    order by priority asc
+    limit 100000
+    ;
+
+    insert into dbm.jc_jes_jobs_email_send_record
+      select
+      user_key
+      , convert_timezone('America/New_York', getdate())::date as send_date
+      , convert_timezone('America/New_York', getdate()) as pull_time
+      , l.campaign_id as campaign_id
+      , 'Liveops' as employer_name
+      , 1 as campaign_version
+      from #audience_liveops l
+      ;
