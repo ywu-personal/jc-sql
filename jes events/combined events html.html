@@ -1,0 +1,493 @@
+%%[
+
+
+                    SET @MID = [memberid]
+                    SET @fname = IIF(NOT EMPTY([user_entered_first_name]),ProperCase([user_entered_first_name]),"")
+
+                    SET @Business_Unit_Rows=LookupRows("ENT.Business_Unit_Logos", "MID", @MID)
+                    SET @Business_Unit_Name=Field(Row(@Business_Unit_Rows,1),"Business_Unit_Name")
+                    SET @Category=Field(Row(@Business_Unit_Rows,1),"Category")
+                    SET @Logo_URL=Field(Row(@Business_Unit_Rows,1),"Logo_URL")
+                    SET @Site_Name=Field(Row(@Business_Unit_Rows,1),"Site_Name")
+                    SET @Site_Prefix=Field(Row(@Business_Unit_Rows,1),"Site_Prefix")
+                    SET @Site_Prefix_Abbr=Field(Row(@Business_Unit_Rows,1),"Site_Prefix_Abbr")
+                    SET @Site_URL=Field(Row(@Business_Unit_Rows,1),"Site_URL")
+                    SET @URL = concat('http://',@Site_URL,'/r')
+                    SET @PrivacyURL = concat('http://',@Site_URL,'/r/privacy_policy')
+
+                    SET @imagesitesurl = replace(@Site_URL, "www.", "")
+
+                    IF @Category == "JobsRadar" then SET @siteabbr = "jr" elseif @Category == "JobHat" then SET @siteabbr = "jh" elseif @Category == "CareerBoutique" then SET @siteabbr = "cb" elseif @Category == "EveryJobForMe" then SET @siteabbr = "ejfm" elseif @Category == "Job-Street" then SET @siteabbr = "js" elseif @Category == "Apply-4-Jobs" then SET @siteabbr = "a4j" elseif @Category == "Get-Me-Jobs" then SET @siteabbr = "gmj" elseif @Category == "JobDepartment" then SET @siteabbr = "jd" elseif @Category == "JobInsider" then SET @siteabbr = "ji" elseif @Category == "Jobcase" then SET @siteabbr = "jc" else SET @siteabbr = "" endif
+
+                    SET @randkey = IIF(NOT EMPTY([data001]), [data001],'')
+                    SET @user_entered_last_name = IIF(NOT EMPTY([data002]), ProperCase([data002]),'')
+                    SET @campaign_id = IIF(NOT EMPTY([data004]), [data004],'')
+
+                    SET @employer_name = IIF(NOT EMPTY([data005]), [data005],'')
+
+
+                    SET @job_title = IIF(NOT EMPTY([data006]), [data006],'')
+                    SET @job_city = IIF(NOT EMPTY([data007]), [data007],'')
+                    SET @job_state = IIF(NOT EMPTY([data008]), [data008],'')
+                    SET @event_address_1_1 = IIF(NOT EMPTY([data009]), [data009],'')
+                    SET @event_address_2_1 = IIF(NOT EMPTY([data010]), [data010],'')
+                    SET @event_city_1 = IIF(NOT EMPTY([data011]), [data011],'')
+                    SET @event_state_1 = IIF(NOT EMPTY([data012]), [data012],'')
+                    SET @event_zip_1 = IIF(NOT EMPTY([data013]), [data013],'')
+                    SET @event_url_1 = IIF(NOT EMPTY([data014]), [data014],'')
+                    SET @event_datetimes_formatted_1 = IIF(NOT EMPTY([data015]), [data015],'')
+                    SET @event_address_1_2 = IIF(NOT EMPTY([data016]), [data016],'')
+                    SET @event_address_2_2 = IIF(NOT EMPTY([data017]), [data017],'')
+                    SET @event_city_2 = IIF(NOT EMPTY([data018]), [data018],'')
+                    SET @event_state_2 = IIF(NOT EMPTY([data019]), [data019],'')
+                    SET @event_zip_2 = IIF(NOT EMPTY([data020]), [data020],'')
+                    SET @event_url_2 = IIF(NOT EMPTY([data021]), [data021],'')
+                    SET @event_datetimes_formatted_2 = IIF(NOT EMPTY([data022]), [data022],'')
+                    SET @event_address_1_3 = IIF(NOT EMPTY([data023]), [data023],'')
+                    SET @event_address_2_3 = IIF(NOT EMPTY([data024]), [data024],'')
+                    SET @event_city_3 = IIF(NOT EMPTY([data025]), [data025],'')
+                    SET @event_state_3 = IIF(NOT EMPTY([data026]), [data026],'')
+                    SET @event_zip_3 = IIF(NOT EMPTY([data027]), [data027],'')
+                    SET @event_url_3 = IIF(NOT EMPTY([data028]), [data028],'')
+                    SET @event_datetimes_formatted_3 = IIF(NOT EMPTY([data029]), [data029],'')
+                    SET @event_address_1_4 = IIF(NOT EMPTY([data030]), [data030],'')
+                    SET @event_address_2_4 = IIF(NOT EMPTY([data031]), [data031],'')
+                    SET @event_city_4 = IIF(NOT EMPTY([data032]), [data032],'')
+                    SET @event_state_4 = IIF(NOT EMPTY([data033]), [data033],'')
+                    SET @event_zip_4 = IIF(NOT EMPTY([data034]), [data034],'')
+                    SET @event_url_4 = IIF(NOT EMPTY([data035]), [data035],'')
+                    SET @event_datetimes_formatted_4 = IIF(NOT EMPTY([data036]), [data036],'')
+                    SET @event_address_1_5 = IIF(NOT EMPTY([data037]), [data037],'')
+                    SET @event_address_2_5 = IIF(NOT EMPTY([data038]), [data038],'')
+                    SET @event_city_5 = IIF(NOT EMPTY([data039]), [data039],'')
+                    SET @event_state_5 = IIF(NOT EMPTY([data040]), [data040],'')
+                    SET @event_zip_5 = IIF(NOT EMPTY([data041]), [data041],'')
+                    SET @event_url_5 = IIF(NOT EMPTY([data042]), [data042],'')
+                    SET @event_datetimes_formatted_5 = IIF(NOT EMPTY([data043]), [data043],'')
+                    SET @special_promotion = IIF(NOT EMPTY([data044]), [data044],'')
+
+                    SET @event_dates_formatted_1 = IIF(NOT EMPTY([data045]), [data045],'')
+                    SET @event_dates_formatted_2 = IIF(NOT EMPTY([data046]), [data046],'')
+                    SET @event_dates_formatted_3 = IIF(NOT EMPTY([data047]), [data047],'')
+                    SET @event_dates_formatted_4 = IIF(NOT EMPTY([data048]), [data048],'')
+                    SET @event_dates_formatted_5 = IIF(NOT EMPTY([data049]), [data049],'')
+                    SET @logo_employer_name = IIF(NOT EMPTY([data050]), [data050],'')
+                    SET @application_event = IIF(NOT EMPTY([data051]), [data051],'')
+
+                    IF @campaign_id == '5647600' AND @employer_name == 'Elior North America' THEN SET @logo_employer_name = 'elior' ENDIF
+
+                    IF @employer_name == 'Axiom' THEN
+                      SET @logo_employer_name = 'axiomstaffinggroup'
+                      SET @employer_name = 'Axiom Staffing Group'
+                    ENDIF
+
+                    SET @employer_row = LookupRows("ENT.JC_MS_JES_Employer_Logo_images","logo_employer_name", @logo_employer_name)
+                    SET @employer_row_value = IIF(rowcount(@employer_row)== 0, "", Field(Row(@employer_row,1),"logo_employer_image_name"))
+                    SET @logo_url = IIF(NOT EMPTY(@employer_row_value), concat("http://email-assets.jobcase.com/jc/",@employer_row_value,".png"), "http://email-assets.jobcase.com/jc/jc_cobrand_logo.png")
+                    SET @primary_value = IIF(rowcount(@employer_row)== 0, "", Field(Row(@employer_row,1),"primary_color"))
+                    SET @secondary_value = IIF(rowcount(@employer_row)== 0, "", Field(Row(@employer_row,1),"secondary_color"))
+
+                    SET @primary_color = IIF(NOT EMPTY(@primary_value), @primary_value, "#278CC2")
+                    SET @secondary_color = IIF(NOT EMPTY(@secondary_value), @secondary_value, "#fd9319")
+
+                    SET @event_type = IIF(@application_event == '1', "an event", "a hiring event")
+
+
+                    SET @subject_line = IIF(NOT EMPTY(@fname), concat("You're invited, ", @fname, "! ", @employer_name, " hiring event on ", @event_dates_formatted_1), concat("You're invited! ", @employer_name, " hiring event on ", @event_dates_formatted_1))
+
+                    SET @header_0 = "UPCOMING EVENT"
+
+
+                    /* ab test on copy, dec 3 2019
+                    rolling out for gmail on dec 13 */
+                    SET @ESP = lowercase(IIF(IndexOf([EmailAddr],'@')>0, substring([EmailAddr],IndexOf([EmailAddr],'@'),Add(Subtract(Length([EmailAddr]),IndexOf([EmailAddr],'@')),1)),'unknown'))
+
+                    IF @ESP == '@gmail.com' THEN
+                    SET @header_1 = IIF(@application_event == '1', concat("Come learn about opportunities at ", @employer_name, "!"), "One event and your career could take off. Don't miss it.")
+                    SET @header_2 = IIF(@application_event == '1', "They're looking for applicants just like you." , concat("Tired of hearing all about the companies? Now, they want to hear about YOU. Attend ", @employer_name, "'s event near you and watch your career take off!"))
+                    ELSE
+                    IF substring(md5(concat('cv90', md5([user_key]))), 3,1) < '8' THEN
+                    SET @header_1 = IIF(@application_event == '1', concat("Come learn about opportunities at ", @employer_name, "!"), "A job seeker walks into an&nbsp;event...")
+                    SET @header_2 = IIF(@application_event == '1', "They're looking for applicants just like you." , concat("And walks out with a job! Sound too good to be true? Think again. ", @employer_name, " invites you to ", @event_type, " near you! Check below for where and when:"))
+                    ELSE
+                    SET @header_1 = IIF(@application_event == '1', concat("Come learn about opportunities at ", @employer_name, "!"), "One event and your career could take off. Don't miss it.")
+                    SET @header_2 = IIF(@application_event == '1', "They're looking for applicants just like you." , concat("Tired of hearing all about the companies? Now, they want to hear about YOU. Attend ", @employer_name, "'s event near you and watch your career take off!"))
+                    ENDIF
+                    ENDIF
+
+                    SET @job_ask = concat("We're looking to fill <strong>", @job_title, "</strong> roles at our <strong>", @job_city, "</strong>&nbsp;location.")
+                    SET @job_footer = concat(@employer_name, ' is proud to offer competitive benefits!')
+
+
+                  IF @campaign_id == '5648623' THEN
+                    IF substring(md5(concat('twal5', md5([user_key]))), 5,1) < '8' THEN
+                      SET @subject_line = IIF(not empty(@fname), concat(@fname, ", ", @employer_name, " is hiring on-the-spot in ", @event_city_1, ", ", @event_state_1, "."), concat(@employer_name, " is hiring on-the-spot in ", @event_city_1, ", ", @event_state_1, "."))
+                    ELSE
+                      SET @subject_line = @subject_line
+                    ENDIF
+                  ENDIF
+
+
+                  IF @logo_employer_name == 'wellsfargo' THEN
+                      SET @subject_line = IIF(NOT EMPTY(@fname), concat('Hi, ', @fname, ', come to the upcoming veterans hiring event in ', @event_city_1, ' hosted by ', @employer_name, '!'),concat('Hi, come to the upcoming veterans hiring event in ', @event_city_1, ' hosted by ', @employer_name, '!'))
+
+                      SET @header_1 = concat(@employer_name, ' Hiring Event for Veterans')
+
+                      SET @header_2 = concat(@employer_name, ' is hosting a FREE hiring event for veterans and their spouses. This is a great opportunity to meet face to face with military-friendly employers, including ', @employer_name, ', who are actively hiring in the ', @event_city_1, ' area.')
+
+                      SET @job_ask = concat("We're looking to fill many Full-Time, Part-Time, and Intern/Co-op positions in the ", @event_city_1, " area.")
+
+                      SET @job_footer = 'Wells Fargo is proud to offer a supportive culture for veteran team members throughout their careers.'
+
+                      ENDIF
+
+                IF @logo_employer_name == 'martinbrower' and @campaign_id == '5647590'  THEN
+
+                  SET @cdl_row = LookupRows("ENT.JC_MS_JES_Events_CDL_Users","user_key", [user_key])
+                  SET @cdl_row_value = IIF(rowcount(@cdl_row)== 0, "", Field(Row(@cdl_row,1),"data001"))
+
+                  IF @cdl_row_value == 'Y' THEN
+                  SET @header_1 = concat(@employer_name, ' Hiring Event for CDL Drivers')
+                  SET @header_2 = concat(@employer_name, ' is hosting a FREE hiring event for CDL Driver Jobs. This is a great opportunity to put your CDL to use!')
+                  ENDIF
+
+                ENDIF
+
+                IF @logo_employer_name == 'chenega' AND @campaign_id == '5647795' THEN
+                  SET @job_footer = "Note: Must possess and maintain National Security Clearance at the Secret level eligibility."
+                  SET @job_ask_test = IIF(substring(md5(concat('c7ha', md5([user_key]))), 2, 1) < '8', 'test' , 'control')
+                ENDIF
+
+                IF @logo_employer_name == 'g4s'  THEN
+                  SET @job_footer = "Note: Certain certificates and licenses may be required to apply for these positions. View event to see the full list."
+                ENDIF
+
+                IF @campaign_id == '5647600' THEN
+                  SET @job_ask = "Elior North America is among the top five contract food service companies in North America. We are currently hiring for various food service positions within our catering businesses."
+                ENDIF
+
+                IF @campaign_id == '5647587' THEN
+                  SET @job_ask = concat("Rooms To Go is America's #1 independent furniture company with the nation's largest furniture inventory. We are currently hiring for various warehouse positions at our ", @job_city, "&nbsp;location.")
+                ENDIF
+
+                IF @campaign_id == '5647957' THEN
+                  SET @job_ask_test = IIF(substring(md5(concat('c7ha', md5([user_key]))), 2, 1) < '8', 'test' , 'control')
+                ENDIF
+
+                IF @employer_name == 'UPS' AND IndexOf(lowercase(@job_title), 'driver helper') > 0 THEN
+                    SET @header_1 = "What if you didn't have to commute to work..."
+                    SET @header_2 = "UPS is hiring Driver Helpers in your area. Attend this event and you could have a job for the holidays. And don't worry about the work commute! They'll pick you up and drop you off."
+                ENDIF
+
+
+                IF IndexOf(lowercase(@event_address_2_1), 'virtual') > 0 THEN
+                  SET @subject_line = REPLACE(@subject_line, "event", "virtual hiring event")
+                  SET @header_1 = "Join a virtual hiring event from home!"
+                  SET @header_2 = concat("Ever gotten a job offer without leaving the house? ", @employer_name, " invites you to join their virtual hiring event. Check out below for details:")
+                ENDIF
+
+        ]%%
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+
+
+
+
+
+
+
+<head>
+<meta name="viewport" content="initial-scale=1.0"/>
+<meta name="x-apple-disable-message-reformatting" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<style type="text/css">
+body {
+width: 100% !important;
+overflow-y: scroll;
+-webkit-text-size-adjust: none;
+background-color: #e1e1e1;
+ margin:0 !important;
+}
+.ReadMsgBody {
+width: 100%;
+}
+.ExternalClass {
+width: 100%;
+}
+.ExternalClass * {
+line-height: 120% !important;
+}
+.appleLinksBlack a {
+color: #000000 !important;
+text-decoration: none;
+}
+
+
+@media (min-width: 480px) {
+.top_head {
+font-size: 44px!important;
+line-height: 40px !important;
+padding-top: 10px !important;
+ padding-bottom: 10px !important;
+     padding-left: 50px !important;
+   padding-right: 50px !important;
+}
+
+.hiring_head {
+font-size: 24px!important;
+line-height: 24px;
+padding-top: 25px !important;
+ padding-bottom: 0px !important;
+     padding-left: 50px !important;
+   padding-right: 50px !important;
+}
+   .bottom_disclaimer {
+font-size: 15px!important;
+line-height: 20px !important;
+padding-top: 0px !important;
+padding-bottom: 40px !important;
+   padding-left: 50px !important;
+   padding-right: 50px !important;
+
+}
+ .bottom_head {
+font-size: 20px!important;
+line-height: 26px !important;
+padding-top: 10px !important;
+padding-bottom: 10px !important;
+   padding-left: 50px !important;
+   padding-right: 50px !important;
+
+}}
+             @media (max-width: 480px) {
+           u + .body .full-wrap {
+    width:100% !important;
+    width:100vw !important;
+               }}
+
+</style>
+<link href='http://fonts.googleapis.com/css?family=Roboto:300,400,700' rel='stylesheet' type='text/css' />
+</head>
+<body class="body" bgcolor="#e1e1e1" style="-webkit-text-size-adjust:none; width: 100% !important; margin:0;">
+<!--THIS IS THE THE WRAPPER TABLE-->
+
+<table align="center" bgcolor="#E1E1E1" border="0" cellpadding="0" cellspacing="0" class="full-wrap" style="margin:0;" width="100%">
+ <tr>
+   <td align="center" bgcolor="#E1E1E1" border="0" cellpadding="0" cellspacing="0" style="margin:0;" valign="top" width="100%">
+     <!--THIS IS THE CONTAINING TABLE-->
+     <!--[if (gte mso 9)|(IE)]>
+                           <table width="620" style="max-width:620px !important;" align="center" cellpadding="0" cellspacing="0" border="0">
+                               <tr>
+                                   <td>
+                           <![endif]-->
+
+
+     <table align="center" bgcolor="#E1E1E1" border="0" cellpadding="0" cellspacing="0" style="max-width:620px !important;" width="100%">
+       <tr>
+         <td align="center" bgcolor="#E1E1E1" border="0" cellpadding="0" cellspacing="0" style="line-height:0px; margin:0; vertical-align:top;">
+           <table align="center" bgcolor="#E1E1E1" border="0" cellpadding="0" cellspacing="0" style="margin:0;" width="100%">
+             <tr>
+               <td align="left" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" class="hiring_head" colspan="2" style="margin:0; padding: 30px 0 0 25px; color:#FF00BF; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:800;border-top:10px solid %%=v(@secondary_color)=%%;">
+                 <img src="%%=v(@logo_url)=%%" height="60">
+               </td>
+             </tr>
+             <tr>
+               <td align="left" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" class="hiring_head" colspan="2" style="margin:0; padding: 30px 0 0 25px; color:#FF00BF; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:800;">
+                 <a href="%%=RedirectTo(@event_url_1)=%%" style="color:%%=v(@secondary_color)=%%; text-decoration:none;">%%=v(@header_0)=%%</a>
+               </td>
+             </tr>
+
+             <tr>
+               <td align="left" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" class="top_head" colspan="2" style="margin:0; padding: 5px 25px 0 25px; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:38px; line-height:36px; font-weight:700;">
+                 <a href="%%=RedirectTo(@event_url_1)=%%" style="color:#373F45; text-decoration:none;">%%=v(@header_1)=%% </a>
+               </td>
+             </tr>
+             <tr>
+               <td align="left" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" class="bottom_head" colspan="2" style="margin:0; padding: 15px 25px 5px 25px;  color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300;">
+                 <a href="%%=RedirectTo(@event_url_1)=%%" style="color:#373F45; text-decoration:none;">%%=v(@header_2)=%%</a>
+               </td>
+             </tr>
+%%[IF NOT EMPTY(@event_url_1) THEN]%%
+
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 5px 0 5px 25px;" valign="middle">
+                 <a href="%%=RedirectTo(@event_url_1)=%%" style="color:#FF00BF; text-decoration:none; vertical-align:middle; display:block;" target="_blank">
+                 <table align="left" border="0" cellpadding="0" cellspacing="0"  style="margin:0;" valign="middle" width="300">
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:%%=v(@secondary_color)=%%; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:700; border-left:8px solid #373F45; padding-left:15px; padding-top:5px;" valign="middle" >
+
+                         %%=v(@event_dates_formatted_1)=%%
+
+                     </td>
+                   </tr>
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300; border-left:8px solid #373F45; padding-left:15px; padding-top:5px; padding-bottom:5px;" valign="middle" >
+
+                         <span style="font-weight:700;">%%=v(@event_city_1)=%%</span>
+                         <br>%%=v(@event_state_1)=%%
+
+                     </td>
+                   </tr>
+                 </table>
+                   </a>
+               </td>
+             </tr>
+%%[ENDIF]%%
+%%[IF NOT EMPTY(@event_url_2) THEN]%%
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 5px 0 5px 25px;" valign="middle">
+                 <a href="%%=RedirectTo(@event_url_2)=%%" style="color:#FF00BF; text-decoration:none; vertical-align:middle; display:block;" target="_blank">
+                 <table align="left" border="0" cellpadding="0" cellspacing="0"  style="margin:0;" valign="middle" width="300">
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:%%=v(@secondary_color)=%%; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:700; border-left:8px solid #373F45; padding-left:15px; padding-top:5px;" valign="middle" >
+
+                         %%=v(@event_dates_formatted_2)=%%
+
+                     </td>
+                   </tr>
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300; border-left:8px solid #373F45; padding-left:15px; padding-top:5px; padding-bottom:5px;" valign="middle" >
+
+                         <span style="font-weight:700;">%%=v(@event_city_2)=%%</span>
+                         <br>%%=v(@event_state_2)=%%
+
+                     </td>
+                   </tr>
+                 </table>
+                   </a>
+               </td>
+             </tr>
+%%[ENDIF]%%
+%%[IF NOT EMPTY(@event_url_3) THEN]%%
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 5px 0 5px 25px;" valign="middle">
+                 <a href="%%=RedirectTo(@event_url_3)=%%" style="color:#FF00BF; text-decoration:none; vertical-align:middle; display:block;" target="_blank">
+                 <table align="left" border="0" cellpadding="0" cellspacing="0"  style="margin:0;" valign="middle" width="300">
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:%%=v(@secondary_color)=%%; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:700; border-left:8px solid #373F45; padding-left:15px; padding-top:5px;" valign="middle" >
+
+                         %%=v(@event_dates_formatted_3)=%%
+
+                     </td>
+                   </tr>
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300; border-left:8px solid #373F45; padding-left:15px; padding-top:5px; padding-bottom:5px;" valign="middle" >
+
+                         <span style="font-weight:700;">%%=v(@event_city_3)=%%</span>
+                         <br>%%=v(@event_state_3)=%%
+
+                     </td>
+                   </tr>
+                 </table>
+                   </a>
+               </td>
+             </tr>
+%%[ENDIF]%%
+%%[IF NOT EMPTY(@event_url_4) THEN]%%
+
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 5px 0 5px 25px;" valign="middle">
+                 <a href="%%=RedirectTo(@event_url_4)=%%" style="color:#FF00BF; text-decoration:none; vertical-align:middle; display:block;" target="_blank">
+                 <table align="left" border="0" cellpadding="0" cellspacing="0"  style="margin:0;" valign="middle" width="300">
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:%%=v(@secondary_color)=%%; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:700; border-left:8px solid #373F45; padding-left:15px; padding-top:5px;" valign="middle" >
+
+                         %%=v(@event_dates_formatted_4)=%%
+
+                     </td>
+                   </tr>
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300; border-left:8px solid #373F45; padding-left:15px; padding-top:5px; padding-bottom:5px;" valign="middle" >
+
+                         <span style="font-weight:700;">%%=v(@event_city_4)=%%</span>
+                         <br>%%=v(@event_state_4)=%%
+
+                     </td>
+                   </tr>
+                 </table>
+                   </a>
+               </td>
+             </tr>
+%%[ENDIF]%%
+%%[IF NOT EMPTY(@event_url_5) THEN]%%
+
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 5px 0 5px 25px;" valign="middle">
+                 <a href="%%=RedirectTo(@event_url_5)=%%" style="color:#FF00BF; text-decoration:none; vertical-align:middle; display:block;" target="_blank">
+                 <table align="left" border="0" cellpadding="0" cellspacing="0"  style="margin:0;" valign="middle" width="300">
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:%%=v(@secondary_color)=%%; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:700; border-left:8px solid #373F45; padding-left:15px; padding-top:5px;" valign="middle" >
+
+                         %%=v(@event_dates_formatted_5)=%%
+
+                     </td>
+                   </tr>
+                   <tr>
+                     <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300; border-left:8px solid #373F45; padding-left:15px; padding-top:5px; padding-bottom:5px;" valign="middle" >
+
+                         <span style="font-weight:700;">%%=v(@event_city_5)=%%</span>
+                         <br>%%=v(@event_state_5)=%%
+
+                     </td>
+                   </tr>
+                 </table>
+                   </a>
+               </td>
+             </tr>
+%%[ENDIF]%%
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 0px 0 25px 25px;" valign="middle">
+				<div><!--[if mso]>
+				  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="%%=RedirectTo(@event_url_1)=%%" style="height:40px;v-text-anchor:middle;width:180px;" arcsize="10%" stroke="f" fillcolor="%%=v(@secondary_color)=%%">
+					<w:anchorlock/>
+					<center>
+				  <![endif]-->
+					  <a href="%%=RedirectTo(@event_url_1)=%%"
+				style="background-color:%%=v(@secondary_color)=%%;border-radius:4px;color:#ffffff;display:inline-block;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:20px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:180px;-webkit-text-size-adjust:none;">VIEW DETAILS</a>
+				  <!--[if mso]>
+					</center>
+				  </v:roundrect>
+				<![endif]--></div>
+               </td>
+             </tr>
+
+             <tr>
+               %%[IF @job_ask_test == "test" and @campaign_id == "5647957" THEN]%%
+                <td align="left" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" class="bottom_head" colspan="2" style="margin:0; padding: 25px 25px 5px 25px;  color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:18px; line-height:20px; font-weight:400;">
+                  <a href="%%=RedirectTo('https://www.jobcase.com/r')=%%" style="color:#373F45; text-decoration:none;"><strong>%%=Iif(Empty(@Fname),"", Concat(@Fname, ": "))=%% Berry Global</strong> is a global manufacturer and marketer of plastic packaging products. We're looking to fill<strong> %%=v(@job_title)=%% </strong>roles at our<strong> %%=v(@job_city)=%% </strong>location.</a>
+                </td>
+               %%[ELSE]%%
+               <td align="left" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" class="bottom_head" colspan="2" style="margin:0; padding: 25px 25px 5px 25px;  color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:18px; line-height:22px; font-weight:400;">
+                 <a href="%%=RedirectTo(@event_url_1)=%%" style="color:#373F45; text-decoration:none;"><strong>%%=Iif(Empty(@Fname),"", Concat(@Fname, ": "))=%%</strong> %%=v(@job_ask)=%%</a>
+               </td>
+               %%[ENDIF]%%
+             </tr>
+             <tr>
+               <td align="left" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" class="bottom_disclaimer" colspan="2" style="margin:0; padding: 10px 25px 30px 25px;  color:#59646C; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:15px; line-height:22px; font-weight:300;">
+                 <a href="%%=RedirectTo(@event_url_1)=%%" style="color:#858F96; text-decoration:none;">
+                 %%=v(@job_footer)=%%</a>
+               </td>
+             </tr>
+
+
+
+             <tr>
+               <td align="center" bgcolor="" colspan="2" style="padding-top:22px; padding-left:0px; padding-right:0px; color:#333333; font-family: 'Roboto', Arial, Helvetica, sans-serif; font-size:11px; line-height:14px; font-weight:normal;">%%=ContentArea("180")=%%</td>
+             </tr>
+           </table>
+         </td>
+       </tr>
+     </table>
+     <!--[if (gte mso 9)|(IE)]>
+       </td>
+   </tr>
+</table>
+<![endif]-->
+   </td>
+ </tr>
+</table>
+</body>
+  <custom name="opencounter" type="tracking">
+</html>
