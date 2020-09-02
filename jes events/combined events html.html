@@ -74,6 +74,33 @@
                     SET @logo_employer_name = IIF(NOT EMPTY([data050]), [data050],'')
                     SET @application_event = IIF(NOT EMPTY([data051]), [data051],'')
 
+                    /* update 08/30/2020 DateTime rowset*/
+                    SET @datetime_array = BuildRowsetFromString([data015], '<br> ')
+                    SET @num_datetimes = rowcount(@datetime_array)
+                    SET @event_datetimes_formatted_1 = IIF(@num_datetimes < 1, '', Field(Row(@datetime_array,1),1))
+                    SET @event_datetimes_formatted_2 = IIF(@num_datetimes < 2, '', Field(Row(@datetime_array,2),1))
+                    SET @event_datetimes_formatted_3 = IIF(@num_datetimes < 3, '', Field(Row(@datetime_array,3),1))
+                    SET @event_datetimes_formatted_4 = IIF(@num_datetimes < 4, '', Field(Row(@datetime_array,4),1))
+                    SET @event_datetimes_formatted_5 = IIF(@num_datetimes < 5, '', Field(Row(@datetime_array,5),1))
+
+                    /* update 08/30/2020 Date rowset*/
+                    SET @date_array = BuildRowsetFromString([data045], '<br> ')
+                    SET @num_dates = rowcount(@date_array)
+                    SET @event_dates_formatted_1 = IIF(@num_dates < 1, '', Field(Row(@date_array,1),1))
+                    SET @event_dates_formatted_2 = IIF(@num_dates < 2, '', Field(Row(@date_array,2),1))
+                    SET @event_dates_formatted_3 = IIF(@num_dates < 3, '', Field(Row(@date_array,3),1))
+                    SET @event_dates_formatted_4 = IIF(@num_dates < 4, '', Field(Row(@date_array,4),1))
+                    SET @event_dates_formatted_5 = IIF(@num_dates < 5, '', Field(Row(@date_array,5),1))
+
+                    /* update 08/30/2020 URL rowset*/
+                    SET @url_array = BuildRowsetFromString([data014], '<br> ')
+                    SET @num_urls = rowcount(@date_array)
+                    SET @event_url_1 = IIF(@num_urls < 1, '', Field(Row(@url_array,1),1))
+                    SET @event_url_2 = IIF(@num_urls < 2, '', Field(Row(@url_array,2),1))
+                    SET @event_url_3 = IIF(@num_urls < 3, '', Field(Row(@url_array,3),1))
+                    SET @event_url_4 = IIF(@num_urls < 4, '', Field(Row(@url_array,4),1))
+                    SET @event_url_5 = IIF(@num_urls < 5, '', Field(Row(@url_array,5),1))
+
                     IF @campaign_id == '5647600' AND @employer_name == 'Elior North America' THEN SET @logo_employer_name = 'elior' ENDIF
 
                     IF @employer_name == 'Axiom' THEN
@@ -334,6 +361,21 @@ padding-bottom: 10px !important;
                    </a>
                </td>
              </tr>
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 0px 0 25px 25px;" valign="middle">
+       <div><!--[if mso]>
+         <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="%%=RedirectTo(@event_url_1)=%%" style="height:40px;v-text-anchor:middle;width:180px;" arcsize="10%" stroke="f" fillcolor="%%=v(@secondary_color)=%%">
+         <w:anchorlock/>
+         <center>
+         <![endif]-->
+           <a href="%%=RedirectTo(@event_url_1)=%%"
+       style="background-color:%%=v(@secondary_color)=%%;border-radius:4px;color:#ffffff;display:inline-block;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:20px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:180px;-webkit-text-size-adjust:none;">VIEW DETAILS</a>
+         <!--[if mso]>
+         </center>
+         </v:roundrect>
+       <![endif]--></div>
+               </td>
+             </tr>
 %%[ENDIF]%%
 %%[IF NOT EMPTY(@event_url_2) THEN]%%
              <tr>
@@ -350,13 +392,28 @@ padding-bottom: 10px !important;
                    <tr>
                      <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300; border-left:8px solid #373F45; padding-left:15px; padding-top:5px; padding-bottom:5px;" valign="middle" >
 
-                         <span style="font-weight:700;">%%=v(@event_city_2)=%%</span>
-                         <br>%%=v(@event_state_2)=%%
+                         <span style="font-weight:700;">%%=v(@event_city_1)=%%</span>
+                         <br>%%=v(@event_state_1)=%%
 
                      </td>
                    </tr>
                  </table>
                    </a>
+               </td>
+             </tr>
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 0px 0 25px 25px;" valign="middle">
+       <div><!--[if mso]>
+         <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="%%=RedirectTo(@event_url_1)=%%" style="height:40px;v-text-anchor:middle;width:180px;" arcsize="10%" stroke="f" fillcolor="%%=v(@secondary_color)=%%">
+         <w:anchorlock/>
+         <center>
+         <![endif]-->
+           <a href="%%=RedirectTo(@event_url_2)=%%"
+       style="background-color:%%=v(@secondary_color)=%%;border-radius:4px;color:#ffffff;display:inline-block;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:20px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:180px;-webkit-text-size-adjust:none;">VIEW DETAILS</a>
+         <!--[if mso]>
+         </center>
+         </v:roundrect>
+       <![endif]--></div>
                </td>
              </tr>
 %%[ENDIF]%%
@@ -375,8 +432,8 @@ padding-bottom: 10px !important;
                    <tr>
                      <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300; border-left:8px solid #373F45; padding-left:15px; padding-top:5px; padding-bottom:5px;" valign="middle" >
 
-                         <span style="font-weight:700;">%%=v(@event_city_3)=%%</span>
-                         <br>%%=v(@event_state_3)=%%
+                         <span style="font-weight:700;">%%=v(@event_city_1)=%%</span>
+                         <br>%%=v(@event_state_1)=%%
 
                      </td>
                    </tr>
@@ -384,6 +441,22 @@ padding-bottom: 10px !important;
                    </a>
                </td>
              </tr>
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 0px 0 25px 25px;" valign="middle">
+       <div><!--[if mso]>
+         <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="%%=RedirectTo(@event_url_1)=%%" style="height:40px;v-text-anchor:middle;width:180px;" arcsize="10%" stroke="f" fillcolor="%%=v(@secondary_color)=%%">
+         <w:anchorlock/>
+         <center>
+         <![endif]-->
+           <a href="%%=RedirectTo(@event_url_3)=%%"
+       style="background-color:%%=v(@secondary_color)=%%;border-radius:4px;color:#ffffff;display:inline-block;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:20px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:180px;-webkit-text-size-adjust:none;">VIEW DETAILS</a>
+         <!--[if mso]>
+         </center>
+         </v:roundrect>
+       <![endif]--></div>
+               </td>
+             </tr>
+
 %%[ENDIF]%%
 %%[IF NOT EMPTY(@event_url_4) THEN]%%
 
@@ -401,13 +474,28 @@ padding-bottom: 10px !important;
                    <tr>
                      <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300; border-left:8px solid #373F45; padding-left:15px; padding-top:5px; padding-bottom:5px;" valign="middle" >
 
-                         <span style="font-weight:700;">%%=v(@event_city_4)=%%</span>
-                         <br>%%=v(@event_state_4)=%%
+                         <span style="font-weight:700;">%%=v(@event_city_1)=%%</span>
+                         <br>%%=v(@event_state_1)=%%
 
                      </td>
                    </tr>
                  </table>
                    </a>
+               </td>
+             </tr>
+             <tr>
+               <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 0px 0 25px 25px;" valign="middle">
+       <div><!--[if mso]>
+         <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="%%=RedirectTo(@event_url_1)=%%" style="height:40px;v-text-anchor:middle;width:180px;" arcsize="10%" stroke="f" fillcolor="%%=v(@secondary_color)=%%">
+         <w:anchorlock/>
+         <center>
+         <![endif]-->
+           <a href="%%=RedirectTo(@event_url_4)=%%"
+       style="background-color:%%=v(@secondary_color)=%%;border-radius:4px;color:#ffffff;display:inline-block;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:20px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:180px;-webkit-text-size-adjust:none;">VIEW DETAILS</a>
+         <!--[if mso]>
+         </center>
+         </v:roundrect>
+       <![endif]--></div>
                </td>
              </tr>
 %%[ENDIF]%%
@@ -427,8 +515,8 @@ padding-bottom: 10px !important;
                    <tr>
                      <td align="left" border="0" cellpadding="0" cellspacing="0" style="margin:0; color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:20px; line-height:25px; font-weight:300; border-left:8px solid #373F45; padding-left:15px; padding-top:5px; padding-bottom:5px;" valign="middle" >
 
-                         <span style="font-weight:700;">%%=v(@event_city_5)=%%</span>
-                         <br>%%=v(@event_state_5)=%%
+                         <span style="font-weight:700;">%%=v(@event_city_1)=%%</span>
+                         <br>%%=v(@event_state_1)=%%
 
                      </td>
                    </tr>
@@ -436,23 +524,22 @@ padding-bottom: 10px !important;
                    </a>
                </td>
              </tr>
-%%[ENDIF]%%
              <tr>
                <td class="top_head" align="left" bgcolor="#ffffff"  border="0" cellpadding="0" cellspacing="0" colspan="2" style=" color:#222222; margin:0; vertical-align:middle; padding: 0px 0 25px 25px;" valign="middle">
-				<div><!--[if mso]>
-				  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="%%=RedirectTo(@event_url_1)=%%" style="height:40px;v-text-anchor:middle;width:180px;" arcsize="10%" stroke="f" fillcolor="%%=v(@secondary_color)=%%">
-					<w:anchorlock/>
-					<center>
-				  <![endif]-->
-					  <a href="%%=RedirectTo(@event_url_1)=%%"
-				style="background-color:%%=v(@secondary_color)=%%;border-radius:4px;color:#ffffff;display:inline-block;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:20px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:180px;-webkit-text-size-adjust:none;">VIEW DETAILS</a>
-				  <!--[if mso]>
-					</center>
-				  </v:roundrect>
-				<![endif]--></div>
+       <div><!--[if mso]>
+         <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="%%=RedirectTo(@event_url_1)=%%" style="height:40px;v-text-anchor:middle;width:180px;" arcsize="10%" stroke="f" fillcolor="%%=v(@secondary_color)=%%">
+         <w:anchorlock/>
+         <center>
+         <![endif]-->
+           <a href="%%=RedirectTo(@event_url_5)=%%"
+       style="background-color:%%=v(@secondary_color)=%%;border-radius:4px;color:#ffffff;display:inline-block;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:20px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:180px;-webkit-text-size-adjust:none;">VIEW DETAILS</a>
+         <!--[if mso]>
+         </center>
+         </v:roundrect>
+       <![endif]--></div>
                </td>
              </tr>
-
+%%[ENDIF]%%
              <tr>
                %%[IF @job_ask_test == "test" and @campaign_id == "5647957" THEN]%%
                 <td align="left" bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" class="bottom_head" colspan="2" style="margin:0; padding: 25px 25px 5px 25px;  color:#373F45; font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size:18px; line-height:20px; font-weight:400;">
